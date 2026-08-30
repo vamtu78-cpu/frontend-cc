@@ -1,0 +1,40 @@
+name: Deploy to VPS
+
+# 每次推到这个分支就自动部署；也可在 Actions 页手动触发
+on:
+  push:
+    branches: [ claude/frontend-chat-app-kp2vju ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 生成可部署页面
+        run: node scripts/build-app.mjs
+
+      - name: 通过 SSH rsync 部署到 VPS
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          TARGET_DIR: ${{ secrets.TARGET_DIR }}
+        run: |
+          set -e
+          PORT="${SSH_PORT:-22}"
+          DIR="${TARGET_DIR:-/var/www/liquid-chat}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_key
+          chmod 600 ~/.ssh/id_key
+          ssh-keyscan -p "$PORT" "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          rsync -az --delete -e "ssh -p $PORT -i ~/.ssh/id_key" app/ "$SSH_USER@$SSH_HOST:$DIR/"
+          echo "✅ 已部署到 $SSH_USER@$SSH_HOST:$DIR"

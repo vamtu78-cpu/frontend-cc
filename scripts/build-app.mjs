@@ -23,7 +23,22 @@ const head = `<!doctype html>
 const tail = `
 <script>
   if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+    // 新版本接管时自动刷新一次，用户无需删图标重装
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (!refreshing) { refreshing = true; location.reload(); }
+    });
+    window.addEventListener("load", async () => {
+      try {
+        const reg = await navigator.serviceWorker.register("sw.js");
+        reg.update();
+        // 每小时以及每次回到前台时检查更新
+        setInterval(() => reg.update(), 60 * 60 * 1000);
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") reg.update();
+        });
+      } catch (e) {}
+    });
   }
 </script>
 </body>
