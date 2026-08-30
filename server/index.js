@@ -11,7 +11,7 @@ const MEMORY_ON = process.env.MEMORY_ON !== '0';
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '4mb' }));
+app.use(express.json({ limit: '25mb' }));   // 允许带图片的较大请求体
 
 /* ================= 极简 MCP (streamable-http) 客户端 ================= */
 let session = null, initialized = false;

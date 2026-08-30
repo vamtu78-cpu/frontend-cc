@@ -58,8 +58,12 @@ location /mem/ {
     proxy_set_header Authorization $http_authorization;
     proxy_buffering off;            # 关键：流式输出不缓冲
     proxy_read_timeout 300s;
+    client_max_body_size 25m;       # 关键：允许带图片的大请求，避免 413
 }
 ```
+
+> 图片上传如果报 **413 Request Entity Too Large**：多半是某个 nginx 的 `client_max_body_size` 太小（默认 1MB）。
+> App 端已在上传前把图压到 1280px/JPEG，通常不会超；若仍报 413，就在**对应那台 nginx**（你的中转或本 /mem）的 server 或 location 里加 `client_max_body_size 25m;` 再 `systemctl reload nginx`。
 
 ```bash
 nginx -t && systemctl reload nginx
