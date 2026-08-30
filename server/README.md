@@ -1,16 +1,16 @@
 # 记忆中转（Ombre Brain + DeepSeek）部署
 
-给聊天 App 加上「Ombre Brain 长期记忆」。App 本身几乎不用改——只要把「接口地址」指向这个后端即可。
+给聊天 App 加上「Ombre Brain 长期记忆」。**主聊天用 Claude；DeepSeek 只负责把记忆压缩/总结/打标签**（便宜）。App 本身几乎不用改——只要把「接口地址」指向这个后端即可。
 
 ```
 你的手机 App
-   │  接口地址 = https://你的域名/mem
+   │  接口地址 = https://你的域名/mem，密钥/模型 = Claude
    ▼
 记忆中转 (本目录, :8787)
    ├─ 先向 Ombre Brain 捞相关记忆，注入对话
-   ├─ 转发给 DeepSeek，流式返回
+   ├─ 转发给 Claude，流式返回
    └─ 聊完把这轮存回 Ombre Brain
-Ombre Brain (:8000, 记忆大脑，情绪标注 + 遗忘曲线)
+Ombre Brain (:8000, 记忆大脑) ── 总结/情绪标注/遗忘 用 DeepSeek
 ```
 
 ## 一、准备
@@ -24,9 +24,11 @@ cd frontend-cc/server
 # 1. 克隆 Ombre Brain 到这里
 git clone https://github.com/P0lar1zzZ/Ombre-Brain.git
 
-# 2. 配置密钥
+# 2. 配置
 cp .env.example .env
-nano .env        # 填 DEEPSEEK_KEY，用中转就改 UPSTREAM_BASE
+nano .env
+#   CHAT_UPSTREAM_BASE = 你原来在 App 里填的 Claude 接口地址（主聊天上游）
+#   DEEPSEEK_KEY / DEEPSEEK_BASE = 给 Ombre Brain 做记忆总结用的 DeepSeek
 ```
 
 ## 二、启动
@@ -67,12 +69,12 @@ nginx -t && systemctl reload nginx
 
 打开 App → 功能 → **API 配置**：
 - **接口地址** 改成：`https://你的域名/mem`
-- **API Key**：你的 DeepSeek 密钥（会被转发给上游）
-- **模型**：`deepseek-chat` 或 `deepseek-reasoner`
+- **API Key**：你的 **Claude** 密钥（会被转发给上游 Claude）
+- **模型**：你的 Claude 模型名（比如 `claude-3-5-sonnet` 等，按你中转支持的填）
 
-保存。现在聊天就自动带 Ombre Brain 记忆了 —— AI 会自己记住重要的事，跨对话都记得。
+保存。现在聊天就自动带 Ombre Brain 记忆了 —— Claude 会自己记住重要的事，跨对话都记得；记忆的总结/标注在后台用 DeepSeek 悄悄做。
 
-> 想临时关掉记忆、直连 DeepSeek：把接口地址改回原来的中转地址即可。
+> 想临时关掉记忆、直连 Claude：把接口地址改回原来的 Claude 中转地址即可。
 
 ## 排错
 

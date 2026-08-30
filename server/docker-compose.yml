@@ -1,14 +1,15 @@
 # 一起启动 Ombre Brain(记忆) + 记忆中转
+# 主聊天转发给 Claude；记忆的总结/打标签走 DeepSeek。
 # 使用前：在本目录旁边克隆 Ombre Brain：
 #   git clone https://github.com/P0lar1zzZ/Ombre-Brain.git
-# 并复制 .env.example 为 .env 填好密钥
+# 并复制 .env.example 为 .env 填好
 services:
   ombre:
     build: ./Ombre-Brain          # 克隆到 server/Ombre-Brain
     environment:
       OMBRE_TRANSPORT: streamable-http
-      OMBRE_API_KEY: ${DEEPSEEK_KEY}          # 用于记忆的情绪标注(OpenAI 兼容)
-      OMBRE_BASE_URL: ${UPSTREAM_BASE:-https://api.deepseek.com}/v1
+      OMBRE_API_KEY: ${DEEPSEEK_KEY}                       # 记忆总结/标注用 DeepSeek
+      OMBRE_BASE_URL: ${DEEPSEEK_BASE:-https://api.deepseek.com}/v1
       OMBRE_BUCKETS_DIR: /data/buckets
     volumes:
       - ombre-data:/data           # 记忆持久化，容器重建也不丢
@@ -21,7 +22,7 @@ services:
     environment:
       PORT: 8787
       OMBRE_URL: http://ombre:8000/mcp
-      UPSTREAM_BASE: ${UPSTREAM_BASE:-https://api.deepseek.com}
+      UPSTREAM_BASE: ${CHAT_UPSTREAM_BASE}                 # 主聊天上游 = Claude
       MEMORY_ON: "1"
     depends_on:
       - ombre
