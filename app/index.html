@@ -368,6 +368,15 @@
       <label class="fld">模型
         <input type="text" id="api-model" placeholder="gpt-4o-mini / claude-3-5-sonnet ..." autocapitalize="off" autocomplete="off" spellcheck="false">
       </label>
+      <label class="fld">温度（创意度）<output id="api-temp-v"></output>
+        <input type="range" id="api-temp" min="0" max="2" step="0.05">
+      </label>
+      <label class="fld">上下文条数（带几条历史）<output id="api-ctx-v"></output>
+        <input type="range" id="api-ctx" min="2" max="60" step="1">
+      </label>
+      <label class="fld">最大回复长度（留空 = 不限）
+        <input type="text" id="api-maxtok" inputmode="numeric" placeholder="如 2048" autocomplete="off">
+      </label>
       <div class="btn-row" style="margin-top:4px">
         <button class="btn flex" id="api-test">测试连接</button>
         <button class="btn flex" id="api-save">保存</button>
@@ -750,7 +759,7 @@ document.getElementById('open-persona').addEventListener('click', () => openShee
 document.getElementById('open-memory').addEventListener('click', () => openSheet(memoryOverlay));
 
 // 存储：API / 人设 / 记忆
-let apiCfg = { baseUrl:'', apiKey:'', model:'' };
+let apiCfg = { baseUrl:'', apiKey:'', model:'', temperature:0.8, maxTokens:'', ctx:40 };
 let persona = '', memory = '';
 try { apiCfg = Object.assign(apiCfg, JSON.parse(localStorage.getItem('lg-api') || '{}')); } catch(e){}
 try { persona = localStorage.getItem('lg-persona') || ''; } catch(e){}
@@ -802,6 +811,13 @@ document.getElementById('new-chat').addEventListener('click', newSession);
 document.getElementById('api-base').value = apiCfg.baseUrl || '';
 document.getElementById('api-key').value = apiCfg.apiKey || '';
 document.getElementById('api-model').value = apiCfg.model || '';
+document.getElementById('api-temp').value = apiCfg.temperature;
+document.getElementById('api-temp-v').textContent = Number(apiCfg.temperature).toFixed(2);
+document.getElementById('api-ctx').value = apiCfg.ctx;
+document.getElementById('api-ctx-v').textContent = apiCfg.ctx;
+document.getElementById('api-maxtok').value = apiCfg.maxTokens || '';
+document.getElementById('api-temp').addEventListener('input', e => document.getElementById('api-temp-v').textContent = Number(e.target.value).toFixed(2));
+document.getElementById('api-ctx').addEventListener('input', e => document.getElementById('api-ctx-v').textContent = e.target.value);
 document.getElementById('persona-name').value = nickname;
 document.getElementById('persona-text').value = persona;
 document.getElementById('memory-text').value = memory;
@@ -815,6 +831,9 @@ document.getElementById('api-save').addEventListener('click', () => {
     baseUrl: document.getElementById('api-base').value.trim(),
     apiKey: document.getElementById('api-key').value.trim(),
     model: document.getElementById('api-model').value.trim(),
+    temperature: parseFloat(document.getElementById('api-temp').value),
+    ctx: parseInt(document.getElementById('api-ctx').value) || 40,
+    maxTokens: document.getElementById('api-maxtok').value.trim(),
   };
   try { localStorage.setItem('lg-api', JSON.stringify(apiCfg)); } catch(e){}
   setApiStatus('✅ 已保存', 'ok');
@@ -987,13 +1006,17 @@ function buildSystem(){
 // 流式请求中转/官方 OpenAI 接口
 // 只把真实对话(不含思维链)发回上下文
 async function streamAI(userText, onDelta, onReason){
+  const ctx = apiCfg.ctx || 40;
   const msgs = [{ role:'system', content: buildSystem() },
-    ...history.slice(-40).map(m => ({ role: m.role, content: m.content })),
+    ...history.slice(-ctx).map(m => ({ role: m.role, content: m.content })),
     { role:'user', content: userText }];
+  const payload = { model: apiCfg.model, messages: msgs, stream: true };
+  if(apiCfg.temperature != null && !isNaN(apiCfg.temperature)) payload.temperature = apiCfg.temperature;
+  const mt = parseInt(apiCfg.maxTokens); if(mt > 0) payload.max_tokens = mt;
   const res = await fetch(apiCfg.baseUrl.replace(/\/$/, '') + '/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiCfg.apiKey },
-    body: JSON.stringify({ model: apiCfg.model, messages: msgs, stream: true })
+    body: JSON.stringify(payload)
   });
   if(!res.ok || !res.body) throw new Error('HTTP ' + res.status + ' ' + (await res.text().catch(()=> '')).slice(0, 160));
   const reader = res.body.getReader(); const dec = new TextDecoder();
