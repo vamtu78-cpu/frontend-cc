@@ -33,7 +33,9 @@
   .topbar {
     position: relative; z-index: 2;
     display: flex; align-items: center; justify-content: space-between;
-    gap: 8px; padding: 18px 16px 12px;
+    gap: 8px;
+    /* 顶部叠加安全区，避开灵动岛/状态栏 */
+    padding: calc(14px + env(safe-area-inset-top)) 16px 12px;
   }
   .glass {
     background: transparent;
@@ -110,7 +112,7 @@
   .typing i:nth-child(3) { animation-delay: 0.4s; }
 
   /* ===== 输入栏 ===== */
-  .composer { position: relative; z-index: 2; padding: 10px 14px calc(12px + env(safe-area-inset-bottom)); }
+  .composer { position: relative; z-index: 2; padding: 10px 14px calc(6px + env(safe-area-inset-bottom)); }
   .inputbar { display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 10px; border-radius: 999px; }
   .icon-btn, .send {
     flex-shrink: 0; border-radius: 999px; color: #fff; cursor: pointer; padding: 0;
