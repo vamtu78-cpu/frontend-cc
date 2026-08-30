@@ -9,6 +9,7 @@
   }
   :root {
     --bub-radius: 23px; --bub-padx: 20px; --bub-pady: 11px; --bub-maxw: 72%;
+    --msg-font: 17px; --avatar-size: 34px;
     --set-bg: rgba(22,28,36,0.86); --set-accent: #8fa2c9;
   }
 
@@ -74,9 +75,9 @@
   .row.multiline { align-items: flex-start; }
 
   .avatar {
-    width: 34px; height: 34px; flex-shrink: 0; border-radius: 999px;
+    width: var(--avatar-size); height: var(--avatar-size); flex-shrink: 0; border-radius: 999px;
     display: flex; align-items: center; justify-content: center;
-    font-size: 16px; font-weight: 600; color: #fff;
+    font-size: calc(var(--avatar-size) * 0.47); font-weight: 600; color: #fff;
     box-shadow: 0 3px 8px rgba(0,0,0,0.3), inset 0 1px 2px rgba(255,255,255,0.35);
     overflow: hidden;
   }
@@ -89,7 +90,7 @@
     max-width: var(--bub-maxw); min-height: 44px;
     padding: var(--bub-pady) var(--bub-padx);
     border-radius: var(--bub-radius);
-    font-size: 17px; line-height: 1.45;
+    font-size: var(--msg-font); line-height: 1.45;
   }
   .message span {
     position: relative; z-index: 2;
@@ -261,6 +262,11 @@
       </div>
 
       <div class="sec">
+        <div class="sec-head"><span>整体大小</span></div>
+        <label>字号 + 头像 <output id="v-scale"></output><input type="range" id="r-scale" min="0.8" max="1.6" step="0.05"></label>
+      </div>
+
+      <div class="sec">
         <div class="sec-head"><span>气泡形状</span></div>
         <label>圆角 <output id="v-bubRadius"></output><input type="range" id="r-bubRadius" min="8" max="40" step="1"></label>
         <label>左右宽度 <output id="v-bubPadX"></output><input type="range" id="r-bubPadX" min="8" max="40" step="1"></label>
@@ -367,7 +373,7 @@ let gl, prog, loc = {}, tex, dpr = Math.min(devicePixelRatio || 1, 2);
 let light = [0.0, -1.0];
 
 const DEFAULTS = { strength:48, edge:12, rimPow:2.4, chroma:0.32, glow:0.20, tint:0.06,
-                   bubRadius:23, bubPadX:20, bubPadY:11, bubMaxW:72 };
+                   scale:1, bubRadius:23, bubPadX:20, bubPadY:11, bubMaxW:72 };
 let params = Object.assign({}, DEFAULTS);
 try { const s = JSON.parse(localStorage.getItem('lg-params') || 'null'); if(s) params = Object.assign({}, DEFAULTS, s); } catch(e){}
 const saveParams = () => { try { localStorage.setItem('lg-params', JSON.stringify(params)); } catch(e){} };
@@ -378,6 +384,8 @@ function setBubbleVars(){
   r.setProperty('--bub-padx', params.bubPadX + 'px');
   r.setProperty('--bub-pady', params.bubPadY + 'px');
   r.setProperty('--bub-maxw', params.bubMaxW + '%');
+  r.setProperty('--msg-font', (17 * params.scale).toFixed(1) + 'px');
+  r.setProperty('--avatar-size', (34 * params.scale).toFixed(1) + 'px');
 }
 setBubbleVars();
 
@@ -525,9 +533,9 @@ phone.addEventListener('drop', (e) => { e.preventDefault();
 try { const saved = localStorage.getItem('lg-wallpaper'); if(saved) setWallpaper(saved, false); } catch(e){}
 
 /* ===== 滑块 ===== */
-const KEYS = ['strength','edge','rimPow','chroma','glow','tint','bubRadius','bubPadX','bubPadY','bubMaxW'];
+const KEYS = ['strength','edge','rimPow','chroma','glow','tint','scale','bubRadius','bubPadX','bubPadY','bubMaxW'];
 const INT = { strength:1, edge:1, bubRadius:1, bubPadX:1, bubPadY:1, bubMaxW:1 };
-const fmt = (k,v) => INT[k] ? Math.round(v) : (k==='rimPow') ? v.toFixed(1) : v.toFixed(2);
+const fmt = (k,v) => k==='scale' ? v.toFixed(2)+'×' : INT[k] ? Math.round(v) : (k==='rimPow') ? v.toFixed(1) : v.toFixed(2);
 function syncPanel(){ KEYS.forEach(k => { document.getElementById('r-'+k).value = params[k]; document.getElementById('v-'+k).textContent = fmt(k, params[k]); }); }
 KEYS.forEach(k => document.getElementById('r-'+k).addEventListener('input', (e) => {
   params[k] = parseFloat(e.target.value); document.getElementById('v-'+k).textContent = fmt(k, params[k]);
