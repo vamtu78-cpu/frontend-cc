@@ -145,6 +145,9 @@
   /* 消息里的图：方形小图，点开看全图；文字在下 */
   .message.media { flex-direction: column; align-items: stretch; }
   .msg-img { display: block; width: 150px; height: 150px; object-fit: cover; border-radius: 14px; margin-bottom: 6px; cursor: pointer; }
+  /* 多图：田字/网格小方块 */
+  .img-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; width: 200px; margin-bottom: 6px; }
+  .grid-img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 10px; cursor: pointer; display: block; }
   .message.media span { margin-top: 2px; }
   /* 全图预览 */
   .lightbox { position: absolute; inset: 0; z-index: 30; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; padding: 20px; }
@@ -1035,20 +1038,26 @@ const lightbox = document.getElementById('img-lightbox');
 function openLightbox(url){ document.getElementById('lightbox-img').src = url; lightbox.hidden = false; }
 lightbox.addEventListener('click', () => { lightbox.hidden = true; });
 
-// 用户消息（图片方形小图在上，文字在下；点图看全图）
+// 用户消息（图片在上，文字在下；单图=方块，多图=田字；点图看全图）
 function addUserMessage(text, images){
+  images = images || [];
   const frag = document.createDocumentFragment();
-  (images || []).forEach(u => {
-    const im = document.createElement('img'); im.className = 'msg-img'; im.src = u;
-    im.addEventListener('click', () => openLightbox(u));
-    frag.append(im);
-  });
+  const mkImg = (u, cls) => { const im = document.createElement('img'); im.className = cls; im.src = u; im.addEventListener('click', () => openLightbox(u)); return im; };
+  if(images.length === 1){
+    frag.append(mkImg(images[0], 'msg-img'));
+  } else if(images.length > 1){
+    const grid = document.createElement('div'); grid.className = 'img-grid';
+    images.forEach(u => grid.append(mkImg(u, 'grid-img')));
+    frag.append(grid);
+  }
   const span = document.createElement('span'); span.textContent = text || ''; if(text) frag.append(span);
   const row = document.createElement('div'); row.className = 'row right';
   const msg = makeBubble('right', frag);
-  if(images && images.length) msg.classList.add('media');
+  if(images.length){ msg.classList.add('media'); row.classList.add('multiline'); } // 有图 → 头像顶端对齐
   row.append(msg, makeAvatar('right'));
-  messagesEl.append(row); requestAnimationFrame(() => alignRow(row, span)); scrollDown();
+  messagesEl.append(row);
+  if(!images.length) requestAnimationFrame(() => alignRow(row, span)); // 有图时保持顶端对齐，不再按行数覆盖
+  scrollDown();
 }
 
 // 上传前压缩，避免请求过大(413)
@@ -1096,8 +1105,13 @@ attachInput.addEventListener('change', () => { addFiles(Array.from(attachInput.f
 function buildSystem(){
   let s = (persona || '').trim();
   if(memory && memory.trim()) s += (s ? '\n\n' : '') + '【长期记忆】\n' + memory.trim();
-  if(splitMode) s += (s ? '\n\n' : '') + '【消息风格】像真人聊天那样，把回复拆成 2~4 条简短的消息，一条一条发。每条消息之间只用 ' + SPLIT_TOKEN + ' 分隔，不要用横线、数字编号或其它分隔符。';
+  if(splitMode) s += (s ? '\n\n' : '') + '【消息风格】像真人聊天那样，把回复拆成 2~4 条简短的消息，一条一条发。每条之间用 ' + SPLIT_TOKEN + ' 或空行分隔。';
   return s || '你是一个温柔友好的聊天助手，用中文自然地回复。';
+}
+// 分条：按 <split> 或空行拆成多段
+function splitSegs(t){
+  if(!splitMode) return [String(t).trim()];
+  return String(t).split(/\s*<split>\s*|\n\s*\n/).map(s => s.trim()).filter(Boolean);
 }
 // 流式请求中转/官方 OpenAI 接口
 // 只把真实对话(不含思维链)发回上下文；userContent 可为字符串或(含图片的)数组
@@ -1162,13 +1176,13 @@ async function send(){
       if(bubbles[i]){ bubbles[i].textContent = t; realign(bubbles[i]); }
     };
     const onDelta = splitMode
-      ? (full) => { full.split(SPLIT_TOKEN).forEach((seg, i) => put(i, seg.trim())); scrollDown(); }
+      ? (full) => { splitSegs(full).forEach((seg, i) => put(i, seg)); scrollDown(); }
       : (full) => { put(0, full); scrollDown(); };
 
     try {
       const { content, reasoning } = await streamAI(userContent, onDelta);
       hideTyping();
-      const segs = splitMode ? content.split(SPLIT_TOKEN).map(s => s.trim()).filter(Boolean) : [content.trim()];
+      const segs = splitSegs(content);
       if(segs.length === 0) segs.push('（空回复）');
       segs.forEach((seg, i) => put(i, seg));
       for(let i = segs.length; i < bubbles.length; i++) bubbles[i]?.closest('.row')?.remove();
