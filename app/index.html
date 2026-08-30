@@ -18,12 +18,13 @@
   /* 统一用 100vh，避免 iOS PWA 底部白边（不要混用 100% / 100dvh / fixed body）*/
   html, body { height: 100vh; margin: 0; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Inter", system-ui, sans-serif;
+    font-family: var(--app-font);
     background: #0b1016;
     display: flex; align-items: center; justify-content: center; overflow: hidden;
   }
   :root {
-    --bub-radius: 23px; --bub-padx: 20px; --bub-pady: 11px; --bub-maxw: 72%;
+    --app-font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Inter", system-ui, sans-serif;
+    --bub-radius: 23px; --bub-padx: 20px; --bub-pady: 9px; --bub-maxw: 72%;
     --msg-font: 17px; --avatar-size: 34px;
     --set-bg: rgba(22,28,36,0.86); --set-accent: #8fa2c9;
   }
@@ -43,9 +44,18 @@
 
   #gl { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
 
+  /* 顶部渐变模糊遮罩：内容上滑时从顶部虚化露出 */
+  .top-fade {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 3; pointer-events: none;
+    height: calc(env(safe-area-inset-top) + 104px);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    -webkit-mask-image: linear-gradient(to bottom, #000 42%, transparent);
+    mask-image: linear-gradient(to bottom, #000 42%, transparent);
+  }
+
   /* ===== 顶栏 ===== */
   .topbar {
-    position: relative; z-index: 2;
+    position: relative; z-index: 4;
     display: flex; align-items: center; justify-content: space-between;
     gap: 8px;
     /* 顶部叠加安全区，避开灵动岛/状态栏 */
@@ -105,10 +115,10 @@
   .message {
     position: relative;
     display: inline-flex; align-items: center;
-    max-width: var(--bub-maxw); min-height: 44px;
+    max-width: var(--bub-maxw);
     padding: var(--bub-pady) var(--bub-padx);
     border-radius: var(--bub-radius);
-    font-size: var(--msg-font); line-height: 1.45;
+    font-size: var(--msg-font); line-height: 1.4;
   }
   .message span {
     position: relative; z-index: 2;
@@ -126,7 +136,7 @@
   .typing i:nth-child(3) { animation-delay: 0.4s; }
 
   /* ===== 输入栏 ===== */
-  .composer { position: relative; z-index: 2; padding: 10px 14px calc(6px + env(safe-area-inset-bottom)); }
+  .composer { position: relative; z-index: 2; padding: 10px 14px calc(2px + env(safe-area-inset-bottom)); }
   .inputbar { display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 10px; border-radius: 999px; }
   .icon-btn, .send {
     flex-shrink: 0; border-radius: 999px; color: #fff; cursor: pointer; padding: 0;
@@ -184,6 +194,25 @@
   }
   .fld textarea { resize: vertical; line-height: 1.5; }
   .fld input:focus, .fld textarea:focus { border-color: var(--set-accent); }
+
+  /* 面板毛玻璃 */
+  .sheet { backdrop-filter: blur(24px) saturate(140%); -webkit-backdrop-filter: blur(24px) saturate(140%); }
+
+  /* 思维链弹窗 */
+  .think-sheet { max-height: 78%; }
+  .think-body {
+    font-size: 14px; line-height: 1.7; color: rgba(255,255,255,0.82);
+    white-space: pre-wrap; word-break: break-word;
+    max-height: 60vh; overflow-y: auto; padding-bottom: 6px;
+  }
+  .think-body::-webkit-scrollbar { width: 0; }
+  /* 有思考过程的 AI 头像：可点 + 小标记 */
+  .avatar.has-think { cursor: pointer; position: relative; }
+  .avatar.has-think::after {
+    content: ''; position: absolute; right: -1px; bottom: -1px;
+    width: 11px; height: 11px; border-radius: 999px;
+    background: var(--set-accent); border: 2px solid rgba(0,0,0,0.35);
+  }
   .sheet {
     width: 100%; max-height: 70%; overflow-y: auto;
     padding: 10px 20px 22px; border-radius: 26px 26px 0 0;
@@ -233,6 +262,7 @@
 
 <div class="phone" id="phone">
   <canvas id="gl"></canvas>
+  <div class="top-fade"></div>
 
   <div class="topbar">
     <button class="glass glass-circle" id="menu-btn" aria-label="菜单" data-side="left">
@@ -357,6 +387,14 @@
       </div>
 
       <div class="sec">
+        <div class="sec-head"><span>字体</span></div>
+        <div class="btn-row">
+          <button class="btn flex" id="font-btn">上传字体</button>
+          <button class="btn flex" id="font-reset">恢复默认</button>
+        </div>
+      </div>
+
+      <div class="sec">
         <div class="sec-head"><span>壁纸</span></div>
         <button class="btn flex" id="wallpaper-btn" style="width:100%">更换壁纸</button>
         <label style="margin-top:14px">壁纸模糊 <output id="v-bgBlur"></output><input type="range" id="r-bgBlur" min="0" max="30" step="1"></label>
@@ -388,9 +426,19 @@
     </div>
   </div>
 
+  <!-- 思维链弹窗（点 AI 头像弹出）-->
+  <div class="overlay bottom" id="think-overlay" hidden>
+    <div class="sheet think-sheet">
+      <div class="grab"></div>
+      <div class="sheet-title">💭 思考过程</div>
+      <div class="think-body" id="think-body"></div>
+    </div>
+  </div>
+
   <input type="file" id="wallpaper-input" accept="image/*" style="display:none" />
   <input type="file" id="ai-avatar-input" accept="image/*" style="display:none" />
   <input type="file" id="user-avatar-input" accept="image/*" style="display:none" />
+  <input type="file" id="font-input" accept=".ttf,.otf,.woff,.woff2,font/*" style="display:none" />
 </div>
 
 <script>
@@ -531,26 +579,18 @@ function initGL(){
 }
 
 let userImg = null;
-function drawCover(x, img, w, h, pad){
-  pad = pad || 0;
-  const W = w + pad*2, H = h + pad*2;
-  const ir = img.width/img.height, cr = W/H; let dw, dh;
-  if(ir > cr){ dh = H; dw = H*ir; } else { dw = W; dh = W/ir; }
-  x.drawImage(img, -pad + (W-dw)/2, -pad + (H-dh)/2, dw, dh);
+function drawCover(x, img, w, h){
+  const ir = img.width/img.height, cr = w/h; let dw, dh;
+  if(ir > cr){ dh = h; dw = h*ir; } else { dw = w; dh = w/ir; }
+  x.drawImage(img, (w-dw)/2, (h-dh)/2, dw, dh);
 }
-function buildBackground(w, h){
+// 先把场景(壁纸或内置渐变)画到一张画布
+function renderScene(w, h){
   const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d');
-  const bpx = (params.bgBlur || 0) * (w / 402);   // 壁纸模糊(按分辨率缩放)
-  if(userImg){
-    if(bpx > 0.5) x.filter = 'blur(' + bpx + 'px)';
-    drawCover(x, userImg, w, h, bpx * 2);          // 多铺一圈避免模糊后露边
-    return c;
-  }
-  // 底色先铺满(不模糊)，避免边缘透明
+  if(userImg){ drawCover(x, userImg, w, h); return c; }
   const grad = x.createLinearGradient(0,0,0,h);
   grad.addColorStop(0,'#4a5a68'); grad.addColorStop(0.42,'#202932'); grad.addColorStop(1,'#0c1116');
   x.fillStyle = grad; x.fillRect(0,0,w,h);
-  if(bpx > 0.5) x.filter = 'blur(' + bpx + 'px)';
   [[0.20,0.08,0.9,'#8aa0b4'],[0.85,0.18,0.7,'#6f8698'],[0.40,0.55,0.5,'#cfd8e0'],
    [0.78,0.72,0.45,'#b6c2cc'],[0.12,0.80,0.42,'#9fb0bd'],[0.55,0.30,0.35,'#dfe7ee']]
   .forEach(([bx,by,rr,cl])=>{ const r = rr*Math.max(w,h)*0.5;
@@ -558,6 +598,21 @@ function buildBackground(w, h){
     rg.addColorStop(0,cl); rg.addColorStop(1,'rgba(0,0,0,0)'); x.fillStyle = rg; x.fillRect(0,0,w,h); });
   x.fillStyle = 'rgba(120,132,148,0.10)'; x.fillRect(0,0,w,h);
   return c;
+}
+// 壁纸模糊：缩小再放大(降采样)，iOS Safari 也支持，不依赖 ctx.filter
+function buildBackground(w, h){
+  const full = renderScene(w, h);
+  const blur = params.bgBlur || 0;
+  if(blur <= 0.5) return full;
+  const factor = 1 + (blur * (w / 402)) / 3;       // 模糊越大，缩得越小
+  const sw = Math.max(2, Math.round(w / factor)), sh = Math.max(2, Math.round(h / factor));
+  const tmp = document.createElement('canvas'); tmp.width = sw; tmp.height = sh;
+  const tx = tmp.getContext('2d'); tx.imageSmoothingEnabled = true; tx.imageSmoothingQuality = 'high';
+  tx.drawImage(full, 0, 0, sw, sh);
+  const out = document.createElement('canvas'); out.width = w; out.height = h;
+  const ox = out.getContext('2d'); ox.imageSmoothingEnabled = true; ox.imageSmoothingQuality = 'high';
+  ox.drawImage(tmp, 0, 0, sw, sh, 0, 0, w, h);
+  return out;
 }
 // 设置面板配色跟随聊天背景（取背景平均色）
 function computeTheme(){
@@ -732,6 +787,27 @@ phone.addEventListener('drop', (e) => { e.preventDefault();
   if(f && f.type.startsWith('image/')){ const rd = new FileReader(); rd.onload = () => setWallpaper(rd.result, true); rd.readAsDataURL(f); } });
 try { const saved = localStorage.getItem('lg-wallpaper'); if(saved) setWallpaper(saved, false); } catch(e){}
 
+/* ===== 上传字体 ===== */
+async function applyFont(dataURL){
+  try {
+    const face = new FontFace('UserFont', 'url(' + dataURL + ')');
+    await face.load(); document.fonts.add(face);
+    document.documentElement.style.setProperty('--app-font', "'UserFont', -apple-system, 'PingFang SC', sans-serif");
+  } catch(e){ console.warn('字体加载失败', e); }
+}
+document.getElementById('font-btn').addEventListener('click', () => document.getElementById('font-input').click());
+document.getElementById('font-input').addEventListener('change', () => {
+  const inp = document.getElementById('font-input'); const f = inp.files && inp.files[0]; if(!f) return;
+  const rd = new FileReader();
+  rd.onload = () => { applyFont(rd.result); try { localStorage.setItem('lg-font', rd.result); } catch(e){ alert('字体文件较大无法长期保存，仅本次生效'); } };
+  rd.readAsDataURL(f); inp.value = '';
+});
+document.getElementById('font-reset').addEventListener('click', () => {
+  document.documentElement.style.removeProperty('--app-font');
+  try { localStorage.removeItem('lg-font'); } catch(e){}
+});
+try { const sf = localStorage.getItem('lg-font'); if(sf) applyFont(sf); } catch(e){}
+
 /* ===== 滑块 ===== */
 const KEYS = ['strength','edge','rimPow','chroma','glow','tint','glassBlur','scale','bubRadius','bubPadX','bubPadY','bubMaxW','bgBlur'];
 const INT = { strength:1, edge:1, glassBlur:1, bubRadius:1, bubPadX:1, bubPadY:1, bubMaxW:1, bgBlur:1 };
@@ -764,6 +840,21 @@ const inputEl = document.getElementById('input');
 const sendEl = document.getElementById('send');
 let typing = false;
 const scrollDown = () => messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior: 'smooth' });
+
+/* ===== 思维链弹窗 ===== */
+const thinkOverlay = document.getElementById('think-overlay');
+bindClose(thinkOverlay);
+function openThink(text){ document.getElementById('think-body').textContent = text; thinkOverlay.hidden = false; }
+function attachReasoning(span, reasoning){
+  if(!reasoning || !reasoning.trim()) return;
+  const row = span.closest('.row'); if(!row) return;
+  const av = row.querySelector('.avatar-ai'); if(!av) return;
+  av.classList.add('has-think'); av._reasoning = reasoning;
+}
+messagesEl.addEventListener('click', (e) => {
+  const av = e.target.closest('.avatar-ai.has-think');
+  if(av && av._reasoning) openThink(av._reasoning);
+});
 
 function makeAvatar(side){
   const a = document.createElement('span');
@@ -809,8 +900,11 @@ function buildSystem(){
   return s || '你是一个温柔友好的聊天助手，用中文自然地回复。';
 }
 // 流式请求中转/官方 OpenAI 接口
-async function streamAI(userText, onDelta){
-  const msgs = [{ role:'system', content: buildSystem() }, ...history.slice(-40), { role:'user', content: userText }];
+// 只把真实对话(不含思维链)发回上下文
+async function streamAI(userText, onDelta, onReason){
+  const msgs = [{ role:'system', content: buildSystem() },
+    ...history.slice(-40).map(m => ({ role: m.role, content: m.content })),
+    { role:'user', content: userText }];
   const res = await fetch(apiCfg.baseUrl.replace(/\/$/, '') + '/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiCfg.apiKey },
@@ -818,7 +912,7 @@ async function streamAI(userText, onDelta){
   });
   if(!res.ok || !res.body) throw new Error('HTTP ' + res.status + ' ' + (await res.text().catch(()=> '')).slice(0, 160));
   const reader = res.body.getReader(); const dec = new TextDecoder();
-  let buf = '', full = '';
+  let buf = '', full = '', reason = '';
   while(true){
     const { value, done } = await reader.read(); if(done) break;
     buf += dec.decode(value, { stream: true });
@@ -827,15 +921,18 @@ async function streamAI(userText, onDelta){
       const line = buf.slice(0, idx).trim(); buf = buf.slice(idx + 1);
       if(!line.startsWith('data:')) continue;
       const data = line.slice(5).trim();
-      if(data === '[DONE]') return full;
+      if(data === '[DONE]') return { content: full, reasoning: reason };
       try {
         const j = JSON.parse(data);
-        const delta = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
-        if(delta){ full += delta; onDelta(full); }
+        const d = j.choices && j.choices[0] && j.choices[0].delta;
+        if(d){
+          if(d.reasoning_content){ reason += d.reasoning_content; onReason && onReason(reason); }
+          if(d.content){ full += d.content; onDelta(full); }
+        }
       } catch(e){}
     }
   }
-  return full;
+  return { content: full, reasoning: reason };
 }
 
 async function send(){
@@ -852,10 +949,11 @@ async function send(){
       span.textContent = full; realign(span); scrollDown();
     };
     try {
-      const full = await streamAI(text, onDelta);
-      if(!span) { hideTyping(); span = addBubble('left', full || '（空回复）'); }
-      else { span.textContent = full || '（空回复）'; realign(span); }
-      history.push({ role: 'assistant', content: full }); saveHistory();
+      const { content, reasoning } = await streamAI(text, onDelta);
+      if(!span) { hideTyping(); span = addBubble('left', content || '（空回复）'); }
+      else { span.textContent = content || '（空回复）'; realign(span); }
+      attachReasoning(span, reasoning);
+      history.push({ role: 'assistant', content: content, reasoning: reasoning }); saveHistory();
     } catch(err){
       hideTyping();
       addBubble('left', '⚠️ ' + err.message);
@@ -873,7 +971,10 @@ inputEl.addEventListener('keydown', e => { if(e.key==='Enter' && !e.shiftKey){ e
 inputEl.addEventListener('input', () => { inputEl.style.height='auto'; inputEl.style.height = Math.min(inputEl.scrollHeight,110)+'px'; });
 
 if(history.length){
-  history.forEach(m => addBubble(m.role === 'user' ? 'right' : 'left', m.content));
+  history.forEach(m => {
+    const sp = addBubble(m.role === 'user' ? 'right' : 'left', m.content);
+    if(m.role !== 'user' && m.reasoning) attachReasoning(sp, m.reasoning);
+  });
 } else {
   seed.forEach(([s,t]) => addBubble(s,t));
 }
