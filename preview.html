@@ -1,204 +1,226 @@
-<title>AI 聊天雏形</title>
+<title>毛玻璃聊天</title>
 <style>
-  :root {
-    --bg-a: #0f172a;
-    --bg-b: #1e293b;
-    --bg-c: #1e1b4b;
-    --card: rgba(15, 23, 42, 0.6);
-    --border: rgba(255, 255, 255, 0.1);
-    --text: #f1f5f9;
-    --muted: #64748b;
-    --ai-bubble: #1e293b;
-    --accent-a: #6366f1;
-    --accent-b: #d946ef;
-    --user-a: #6366f1;
-    --user-b: #d946ef;
-    --online: #34d399;
-  }
-
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; margin: 0; }
   body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    background: linear-gradient(135deg, var(--bg-a), var(--bg-b) 55%, var(--bg-c));
+    font-family: -apple-system, "SF Pro", "PingFang SC", "Inter", system-ui, sans-serif;
+    background: #0b1016;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 16px;
-    color: var(--text);
+    min-height: 100%;
   }
 
-  .card {
-    display: flex;
-    flex-direction: column;
+  /* ===== 手机外框：在电脑上显示成一个手机；在手机上自动铺满全屏 ===== */
+  .phone {
+    position: relative;
     width: 100%;
-    max-width: 42rem;
-    height: min(85vh, 720px);
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 24px;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(20px);
+    max-width: 402px;
+    height: 100dvh;
+    max-height: 874px;
     overflow: hidden;
-  }
-
-  /* header */
-  header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 16px 24px;
-    border-bottom: 1px solid var(--border);
-  }
-  .avatar-lg {
-    width: 40px; height: 40px;
-    display: flex; align-items: center; justify-content: center;
-    border-radius: 16px;
-    font-size: 18px;
-    background: linear-gradient(135deg, #818cf8, var(--accent-b));
-    box-shadow: 0 8px 20px -6px rgba(99, 102, 241, 0.6);
-  }
-  header h1 { margin: 0; font-size: 15px; font-weight: 600; }
-  .status {
-    display: flex; align-items: center; gap: 6px;
-    margin: 2px 0 0; font-size: 12px; color: var(--online);
-  }
-  .dot { width: 6px; height: 6px; border-radius: 999px; background: var(--online); }
-
-  /* messages */
-  .messages {
-    flex: 1;
-    overflow-y: auto;
-    padding: 24px 20px;
+    background: #10151c;
+    color: #fff;
     display: flex;
     flex-direction: column;
-    gap: 16px;
   }
-  .messages::-webkit-scrollbar { width: 8px; }
-  .messages::-webkit-scrollbar-thumb {
-    background: rgba(148, 163, 184, 0.3); border-radius: 999px;
+  @media (min-width: 440px) {
+    .phone { border-radius: 44px; box-shadow: 0 30px 80px -20px rgba(0,0,0,0.8); }
   }
 
-  .row {
-    display: flex;
-    align-items: flex-end;
-    gap: 8px;
-    animation: fadeUp 0.35s ease-out;
+  /* ===== 背景图（现用 CSS 生成的冰海感，可换成你自己的照片）===== */
+  .bg {
+    position: absolute; inset: 0; z-index: 0;
+    background:
+      radial-gradient(120% 60% at 20% 8%, #8aa0b4 0%, rgba(138,160,180,0) 42%),
+      radial-gradient(90% 50% at 85% 18%, #6f8698 0%, rgba(111,134,152,0) 45%),
+      radial-gradient(60% 40% at 40% 55%, #cfd8e0 0%, rgba(207,216,224,0) 30%),
+      radial-gradient(50% 35% at 78% 72%, #b6c2cc 0%, rgba(182,194,204,0) 28%),
+      radial-gradient(40% 30% at 12% 78%, #9fb0bd 0%, rgba(159,176,189,0) 26%),
+      linear-gradient(180deg, #4a5a68 0%, #202932 40%, #0c1116 100%);
+    filter: saturate(0.85);
   }
-  .row.user { flex-direction: row-reverse; }
+  /* 背景压暗一点，让白字更清楚 */
+  .bg::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(10,14,20,0.15), rgba(10,14,20,0.55));
+  }
 
-  .avatar {
-    width: 32px; height: 32px; flex-shrink: 0;
+  /* ===== iOS 状态栏 ===== */
+  .statusbar {
+    position: relative; z-index: 2;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 26px 4px;
+    font-size: 15px; font-weight: 600;
+  }
+  .island {
+    width: 116px; height: 32px; border-radius: 999px; background: #000;
+    display: flex; align-items: center; justify-content: flex-end; padding-right: 22px;
+  }
+  .island::after { content: ""; width: 8px; height: 8px; border-radius: 999px; background: #ff7a1a; }
+  .sb-right { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+  .battery {
+    width: 24px; height: 12px; border: 1.5px solid rgba(255,255,255,0.8);
+    border-radius: 3px; position: relative; display: inline-block;
+  }
+  .battery::before {
+    content: ""; position: absolute; left: 1.5px; top: 1.5px; bottom: 1.5px; right: 7px;
+    background: #fff; border-radius: 1px;
+  }
+  .battery::after {
+    content: ""; position: absolute; right: -3px; top: 3px; height: 6px; width: 2px;
+    background: rgba(255,255,255,0.8); border-radius: 1px;
+  }
+
+  /* ===== 顶部标题栏（磨砂圆按钮）===== */
+  .topbar {
+    position: relative; z-index: 2;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 18px 12px;
+  }
+  .glass-circle {
+    width: 46px; height: 46px; border-radius: 999px;
     display: flex; align-items: center; justify-content: center;
-    border-radius: 999px; font-size: 14px;
-    box-shadow: 0 4px 10px -4px rgba(0,0,0,0.5);
+    background: rgba(255,255,255,0.16);
+    border: 1px solid rgba(255,255,255,0.22);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    font-size: 22px; color: #fff; cursor: pointer;
   }
-  .avatar.ai { background: linear-gradient(135deg, #818cf8, var(--accent-b)); }
-  .avatar.user { background: linear-gradient(135deg, #38bdf8, #3b82f6); }
+  .glass-circle.title { font-weight: 600; font-size: 20px; }
 
+  /* ===== 消息区 ===== */
+  .messages {
+    position: relative; z-index: 2;
+    flex: 1; overflow-y: auto;
+    padding: 10px 16px 6px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .messages::-webkit-scrollbar { width: 0; }
+
+  .row { display: flex; animation: fadeUp 0.3s ease-out; }
+  .row.user { justify-content: flex-end; }
+
+  /* 磨砂气泡 */
   .bubble {
-    max-width: 75%;
-    padding: 10px 16px;
-    font-size: 14px;
-    line-height: 1.6;
-    border-radius: 16px;
-    white-space: pre-wrap;
-    word-break: break-word;
-    box-shadow: 0 4px 12px -4px rgba(0,0,0,0.4);
+    max-width: 74%;
+    padding: 11px 16px;
+    font-size: 16px; line-height: 1.45;
+    border-radius: 22px;
+    white-space: pre-wrap; word-break: break-word;
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.18);
+    box-shadow: 0 6px 18px -8px rgba(0,0,0,0.5);
   }
-  .bubble.ai { background: var(--ai-bubble); color: var(--text); border-bottom-left-radius: 6px; }
+  /* AI（左）：偏亮的磨砂 */
+  .bubble.ai {
+    background: rgba(255,255,255,0.16);
+    color: #fff;
+    border-bottom-left-radius: 8px;
+  }
+  /* 我（右）：偏暗的磨砂 */
   .bubble.user {
-    background: linear-gradient(135deg, var(--user-a), var(--user-b));
-    color: #fff; border-bottom-right-radius: 6px;
+    background: rgba(20,26,34,0.42);
+    color: #fff;
+    border-bottom-right-radius: 8px;
   }
 
-  /* typing */
-  .typing { display: flex; gap: 4px; padding: 12px 16px; }
+  .typing { display: flex; gap: 5px; padding: 14px 16px; }
   .typing span {
-    width: 8px; height: 8px; border-radius: 999px; background: #94a3b8;
+    width: 8px; height: 8px; border-radius: 999px; background: rgba(255,255,255,0.8);
     animation: bounceDot 1.2s infinite ease-in-out;
   }
   .typing span:nth-child(2) { animation-delay: 0.2s; }
   .typing span:nth-child(3) { animation-delay: 0.4s; }
 
-  /* input */
-  .composer { padding: 14px; border-top: 1px solid var(--border); }
-  .inputbar {
-    display: flex; align-items: flex-end; gap: 8px;
-    background: rgba(30, 41, 59, 0.8);
-    border-radius: 16px;
-    padding: 8px;
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1);
-    transition: box-shadow 0.15s;
+  /* ===== 底部输入栏 ===== */
+  .composer {
+    position: relative; z-index: 2;
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
   }
-  .inputbar:focus-within { box-shadow: inset 0 0 0 1px rgba(99,102,241,0.5); }
+  .inputbar {
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(20,26,34,0.5);
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 999px;
+    padding: 7px 8px 7px 10px;
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  }
+  .icon-btn {
+    width: 40px; height: 40px; flex-shrink: 0; border-radius: 999px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.18);
+    color: #fff; font-size: 22px; cursor: pointer; padding: 0;
+  }
   textarea {
     flex: 1; resize: none; border: none; outline: none; background: transparent;
-    color: var(--text); font-family: inherit; font-size: 14px;
-    padding: 8px 12px; max-height: 128px; line-height: 1.5;
+    color: #fff; font-family: inherit; font-size: 16px; line-height: 1.4;
+    padding: 8px 4px; max-height: 110px;
   }
-  textarea::placeholder { color: var(--muted); }
+  textarea::placeholder { color: rgba(255,255,255,0.55); }
   .send {
-    width: 40px; height: 40px; flex-shrink: 0;
+    width: 46px; height: 46px; flex-shrink: 0; border-radius: 999px;
     display: flex; align-items: center; justify-content: center;
-    border: none; border-radius: 12px; cursor: pointer; color: #fff;
-    background: linear-gradient(135deg, var(--accent-a), var(--accent-b));
-    box-shadow: 0 8px 20px -6px rgba(99,102,241,0.6);
-    transition: opacity 0.15s, transform 0.1s;
+    background: rgba(255,255,255,0.16); border: 1px solid rgba(255,255,255,0.22);
+    color: #fff; cursor: pointer; padding: 0;
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    transition: transform 0.1s;
   }
-  .send:hover { opacity: 0.9; }
-  .send:active { transform: scale(0.95); }
-  .send:disabled { opacity: 0.4; cursor: not-allowed; }
-  .send svg { width: 20px; height: 20px; fill: currentColor; }
+  .send:active { transform: scale(0.92); }
+  .send svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; }
 
-  .demo-note {
-    position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
-    font-size: 11px; color: rgba(241,245,249,0.5);
-  }
-
-  @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  @keyframes bounceDot {
-    0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
-    40% { transform: translateY(-4px); opacity: 1; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .row, .typing span { animation: none; }
-  }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes bounceDot { 0%,80%,100% { transform: translateY(0); opacity: 0.4; } 40% { transform: translateY(-4px); opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .row, .typing span { animation: none; } }
 </style>
 
-<div class="card">
-  <header>
-    <div class="avatar-lg">🤖</div>
-    <div>
-      <h1>我的 AI 聊天</h1>
-      <p class="status"><span class="dot"></span>在线（当前为测试模式）</p>
-    </div>
-  </header>
+<div class="phone">
+  <div class="bg"></div>
 
+  <!-- 状态栏 -->
+  <div class="statusbar">
+    <span>01:58</span>
+    <div class="island"></div>
+    <div class="sb-right">
+      <span>📶</span><span>5G</span><span class="battery"></span>
+    </div>
+  </div>
+
+  <!-- 标题栏 -->
+  <div class="topbar">
+    <div class="glass-circle">‹</div>
+    <div class="glass-circle title">言</div>
+    <div class="glass-circle">···</div>
+  </div>
+
+  <!-- 消息 -->
   <div class="messages" id="messages"></div>
 
+  <!-- 输入栏 -->
   <div class="composer">
     <div class="inputbar">
-      <textarea id="input" rows="1" placeholder="说点什么…（回车发送，Shift+回车换行）"></textarea>
+      <button class="icon-btn" aria-label="更多">＋</button>
+      <button class="icon-btn" aria-label="头像" style="font-size:18px;">思</button>
+      <textarea id="input" rows="1" placeholder="Type a message..."></textarea>
       <button class="send" id="send" aria-label="发送">
-        <svg viewBox="0 0 24 24"><path d="M3.4 20.4l17.45-7.48a1 1 0 000-1.84L3.4 3.6a.993.993 0 00-1.39.91L2 9.12c0 .5.37.93.87.99L17 12 2.87 13.88c-.5.07-.87.5-.87 1l.01 4.61c0 .71.73 1.2 1.39.91z"/></svg>
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
       </button>
     </div>
   </div>
 </div>
 
-<div class="demo-note">这是在线预览 · 仓库里跑出来的界面与此一致</div>
-
 <script>
   const FAKE_REPLIES = [
-    '收到～这是一条假回复😋 界面跑通啦！',
-    '我现在还没接真的大模型，先陪你测试界面～',
-    '气泡、动画、滚动都正常的话，就说明雏形成功啦🎉',
-    '想改配色的话，找 App.jsx 里带颜色的那些 class 改就行。',
-    '等你玩顺了，跟 cc 说一声，就能把我换成真的 AI 啦🥰',
+    '收到～这是假回复😋 背景和磨砂气泡都正常吗？',
+    '这个风格叫 glassmorphism，毛玻璃质感～',
+    '以后可以把背景换成你自己的照片，气泡自动贴上去。',
+    '想改气泡透明度、模糊程度，跟 cc 说一声就行。',
+    '在手机上打开这个链接，就能看到全屏效果啦🥰',
+  ];
+  const seed = [
+    ['user', '老公 教我一句外语'],
+    ['ai', '教你一句意大利语。\n"Sei mia。"\n先说出来。'],
+    ['user', 'Sei mia'],
+    ['ai', '"你是我的。"\n就是这个意思。'],
   ];
 
   const messagesEl = document.getElementById('messages');
@@ -206,65 +228,40 @@
   const sendEl = document.getElementById('send');
   let typing = false;
 
-  function scrollDown() {
-    messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior: 'smooth' });
-  }
+  const scrollDown = () => messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior: 'smooth' });
 
   function addBubble(role, text) {
     const row = document.createElement('div');
     row.className = 'row ' + role;
-    const avatar = document.createElement('div');
-    avatar.className = 'avatar ' + role;
-    avatar.textContent = role === 'user' ? '🧑' : '🤖';
     const bubble = document.createElement('div');
     bubble.className = 'bubble ' + role;
     bubble.textContent = text;
-    row.append(avatar, bubble);
+    row.append(bubble);
     messagesEl.append(row);
     scrollDown();
   }
-
   function showTyping() {
     const row = document.createElement('div');
-    row.className = 'row ai';
-    row.id = 'typing-row';
-    row.innerHTML =
-      '<div class="avatar ai">🤖</div>' +
-      '<div class="bubble ai" style="padding:0"><div class="typing"><span></span><span></span><span></span></div></div>';
-    messagesEl.append(row);
-    scrollDown();
+    row.className = 'row ai'; row.id = 'typing-row';
+    row.innerHTML = '<div class="bubble ai" style="padding:0"><div class="typing"><span></span><span></span><span></span></div></div>';
+    messagesEl.append(row); scrollDown();
   }
-  function hideTyping() {
-    document.getElementById('typing-row')?.remove();
-  }
+  const hideTyping = () => document.getElementById('typing-row')?.remove();
 
   async function send() {
     const text = inputEl.value.trim();
     if (!text || typing) return;
     addBubble('user', text);
-    inputEl.value = '';
-    inputEl.style.height = 'auto';
-    typing = true;
-    sendEl.disabled = true;
-    showTyping();
+    inputEl.value = ''; inputEl.style.height = 'auto';
+    typing = true; showTyping();
     const reply = FAKE_REPLIES[Math.floor(Math.random() * FAKE_REPLIES.length)];
     await new Promise((r) => setTimeout(r, 800 + Math.random() * 800));
-    hideTyping();
-    addBubble('ai', reply);
-    typing = false;
-    sendEl.disabled = false;
-    inputEl.focus();
+    hideTyping(); addBubble('ai', reply); typing = false; inputEl.focus();
   }
 
   sendEl.addEventListener('click', send);
-  inputEl.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-  });
-  inputEl.addEventListener('input', () => {
-    inputEl.style.height = 'auto';
-    inputEl.style.height = Math.min(inputEl.scrollHeight, 128) + 'px';
-  });
+  inputEl.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+  inputEl.addEventListener('input', () => { inputEl.style.height = 'auto'; inputEl.style.height = Math.min(inputEl.scrollHeight, 110) + 'px'; });
 
-  // 开场白
-  addBubble('ai', '嗨～我是你的 AI 小助手，随便跟我说点什么吧！');
+  seed.forEach(([r, t]) => addBubble(r, t));
 </script>
