@@ -212,12 +212,17 @@
   /* 面板毛玻璃 */
   .sheet { backdrop-filter: blur(24px) saturate(140%); -webkit-backdrop-filter: blur(24px) saturate(140%); }
 
-  /* 思维链弹窗 */
-  .think-sheet { max-height: 78%; }
+  /* 思维链弹窗：固定大尺寸，不随内容缩放 */
+  .think-sheet {
+    height: 78%; max-height: 78%; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .think-title { text-align: center; font-weight: 800; margin: 4px 0 0; }
   .think-body {
+    flex: 1; margin-top: 22px;                 /* 与标题空约一行 */
     font-size: 14px; line-height: 1.7; color: rgba(255,255,255,0.82);
     white-space: pre-wrap; word-break: break-word;
-    max-height: 60vh; overflow-y: auto; padding-bottom: 6px;
+    overflow-y: auto; padding-bottom: 6px;
   }
   .think-body::-webkit-scrollbar { width: 0; }
   /* 有思考过程的 AI 头像：可点 + 右上角 ✦ 标记(头像外) */
@@ -450,7 +455,7 @@
   <div class="overlay bottom" id="think-overlay" hidden>
     <div class="sheet think-sheet">
       <div class="grab"></div>
-      <div class="sheet-title">💭 思考过程</div>
+      <div class="sheet-title think-title">Thought process</div>
       <div class="think-body" id="think-body"></div>
     </div>
   </div>
