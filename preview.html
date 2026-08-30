@@ -103,9 +103,49 @@
   }
   textarea::placeholder { color: rgba(255,255,255,0.6); }
 
+  /* 调节面板 */
+  #panel {
+    position: absolute; z-index: 5; top: 74px; right: 14px; width: 244px;
+    padding: 14px 16px 16px; border-radius: 20px;
+    background: rgba(24,30,38,0.82);
+    border: 1px solid rgba(255,255,255,0.18);
+    backdrop-filter: blur(24px) saturate(150%); -webkit-backdrop-filter: blur(24px) saturate(150%);
+    box-shadow: 0 20px 50px -12px rgba(0,0,0,0.7);
+    animation: fadeUp 0.2s ease-out;
+  }
+  #panel[hidden] { display: none; }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 14px; font-weight: 600; margin-bottom: 12px;
+  }
+  #panel-reset {
+    font-size: 12px; color: #fff; cursor: pointer;
+    background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 999px; padding: 3px 12px;
+  }
+  #panel label {
+    display: block; font-size: 12px; color: rgba(255,255,255,0.8);
+    margin-bottom: 10px;
+  }
+  #panel output {
+    float: right; font-variant-numeric: tabular-nums; color: #fff;
+    font-weight: 600;
+  }
+  #panel input[type=range] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 4px;
+    margin-top: 8px; border-radius: 999px; background: rgba(255,255,255,0.22); outline: none;
+  }
+  #panel input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 18px; height: 18px; border-radius: 999px;
+    background: #fff; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  }
+  #panel input[type=range]::-moz-range-thumb {
+    width: 18px; height: 18px; border: none; border-radius: 999px; background: #fff; cursor: pointer;
+  }
+
   @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes bounceDot { 0%,80%,100% { transform: translateY(0); opacity: 0.4; } 40% { transform: translateY(-4px); opacity: 1; } }
-  @media (prefers-reduced-motion: reduce) { .row, .typing i { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .row, .typing i, #panel { animation: none; } }
 </style>
 
 <div class="phone" id="phone">
@@ -114,9 +154,32 @@
   <div class="topbar">
     <div class="glass glass-circle" data-side="left">‹</div>
     <div class="glass glass-circle title" data-side="left">言</div>
-    <div class="glass glass-circle" id="wallpaper-btn" data-side="left" title="换壁纸">🖼️</div>
+    <div style="display:flex; gap:10px;">
+      <div class="glass glass-circle" id="wallpaper-btn" data-side="left" title="换壁纸">🖼️</div>
+      <div class="glass glass-circle" id="tune-btn" data-side="left" title="调节玻璃">⚙️</div>
+    </div>
   </div>
   <input type="file" id="wallpaper-input" accept="image/*" style="display:none" />
+
+  <!-- 调节面板 -->
+  <div id="panel" hidden>
+    <div class="panel-head">
+      <span>玻璃调节</span>
+      <button id="panel-reset" type="button">重置</button>
+    </div>
+    <label>折射强度 <output id="v-strength"></output>
+      <input type="range" id="r-strength" min="0" max="120" step="1"></label>
+    <label>折射宽度 <output id="v-edge"></output>
+      <input type="range" id="r-edge" min="2" max="48" step="1"></label>
+    <label>边缘锐度 <output id="v-rimPow"></output>
+      <input type="range" id="r-rimPow" min="1" max="5" step="0.1"></label>
+    <label>色散彩边 <output id="v-chroma"></output>
+      <input type="range" id="r-chroma" min="0" max="0.8" step="0.01"></label>
+    <label>边缘反光 <output id="v-glow"></output>
+      <input type="range" id="r-glow" min="0" max="0.6" step="0.01"></label>
+    <label>玻璃染色 <output id="v-tint"></output>
+      <input type="range" id="r-tint" min="0" max="0.3" step="0.01"></label>
+  </div>
 
   <div class="messages" id="messages"></div>
 
@@ -157,6 +220,8 @@ uniform float uStrength;       // 折射强度(px)
 uniform float uEdge;           // 边缘透镜宽度(px)
 uniform float uChroma;         // 色散
 uniform float uGlow;           // 边缘反光
+uniform float uRimPow;         // 边缘锐度(越大越细)
+uniform float uTint;           // 玻璃染色(越大越不透)
 
 float sdRound(vec2 p, vec2 c, vec2 hw, float r){
   vec2 q = abs(p - c) - hw + r;
@@ -192,7 +257,7 @@ void main(){
     ) + 1e-6);
     // 边缘透镜权重：贴边强、中心为 0（指数越大越集中在最外圈=越细）
     float rim = 1.0 - smoothstep(0.0, uEdge, -d);
-    rim = pow(rim, 2.4);
+    rim = pow(rim, uRimPow);
 
     vec2 off = g * uStrength * rim; // 向外采样 = 边缘吸入周围内容
     vec3 refr;
@@ -202,7 +267,7 @@ void main(){
 
     // 玻璃本体极淡染色（亮/暗），保持通透不磨砂
     vec3 tint = mix(vec3(0.16,0.19,0.24), vec3(0.85,0.90,0.98), side);
-    float tintA = mix(0.06, 0.05, side);
+    float tintA = uTint * mix(1.1, 0.9, side);
     vec3 glass = mix(refr, tint, tintA);
 
     // Fresnel 边缘反光
@@ -221,6 +286,15 @@ const phone = document.getElementById('phone');
 const canvas = document.getElementById('gl');
 let gl, prog, loc = {}, tex, dpr = Math.min(devicePixelRatio || 1, 2);
 let light = [0.0, -1.0];
+
+// 可调参数（滑块控制）
+const DEFAULTS = { strength: 48, edge: 12, rimPow: 2.4, chroma: 0.32, glow: 0.20, tint: 0.06 };
+let params = Object.assign({}, DEFAULTS);
+try {
+  const saved = JSON.parse(localStorage.getItem('lg-params') || 'null');
+  if(saved) params = Object.assign({}, DEFAULTS, saved);
+} catch(e){}
+const saveParams = () => { try { localStorage.setItem('lg-params', JSON.stringify(params)); } catch(e){} };
 
 function compile(type, src){
   const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
@@ -244,7 +318,7 @@ function initGL(){
   const a = gl.getAttribLocation(prog, 'a');
   gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0);
 
-  ['uRes','uTex','uCount','uLight','uStrength','uEdge','uChroma','uGlow']
+  ['uRes','uTex','uCount','uLight','uStrength','uEdge','uChroma','uGlow','uRimPow','uTint']
     .forEach(n => loc[n] = gl.getUniformLocation(prog, n));
   loc.uRect = gl.getUniformLocation(prog, 'uRect[0]');
   loc.uMeta = gl.getUniformLocation(prog, 'uMeta[0]');
@@ -351,10 +425,12 @@ function frame(){
   gl.uniform4fv(loc.uRect, rects);
   gl.uniform2fv(loc.uMeta, metas);
   gl.uniform2f(loc.uLight, light[0], light[1]);
-  gl.uniform1f(loc.uStrength, 48.0 * dpr); // 折射强度
-  gl.uniform1f(loc.uEdge, 12.0 * dpr);     // 边缘透镜宽度(越小越细)
-  gl.uniform1f(loc.uChroma, 0.32);         // 色散(越大彩边越明显)
-  gl.uniform1f(loc.uGlow, 0.20);           // 边缘反光
+  gl.uniform1f(loc.uStrength, params.strength * dpr);
+  gl.uniform1f(loc.uEdge, params.edge * dpr);
+  gl.uniform1f(loc.uChroma, params.chroma);
+  gl.uniform1f(loc.uGlow, params.glow);
+  gl.uniform1f(loc.uRimPow, params.rimPow);
+  gl.uniform1f(loc.uTint, params.tint);
 
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -399,6 +475,31 @@ try {
   const saved = localStorage.getItem('lg-wallpaper');
   if(saved) setWallpaper(saved, false);
 } catch(e){}
+
+// ===== 调节面板 =====
+const panel = document.getElementById('panel');
+document.getElementById('tune-btn').addEventListener('click', () => { panel.hidden = !panel.hidden; });
+const KEYS = ['strength','edge','rimPow','chroma','glow','tint'];
+const fmt = (k, v) => (k === 'strength' || k === 'edge') ? Math.round(v)
+                    : (k === 'rimPow') ? v.toFixed(1) : v.toFixed(2);
+function syncPanel(){
+  KEYS.forEach(k => {
+    document.getElementById('r-' + k).value = params[k];
+    document.getElementById('v-' + k).textContent = fmt(k, params[k]);
+  });
+}
+KEYS.forEach(k => {
+  document.getElementById('r-' + k).addEventListener('input', (e) => {
+    params[k] = parseFloat(e.target.value);
+    document.getElementById('v-' + k).textContent = fmt(k, params[k]);
+    saveParams();
+  });
+});
+document.getElementById('panel-reset').addEventListener('click', () => {
+  params = Object.assign({}, DEFAULTS);
+  syncPanel(); saveParams();
+});
+syncPanel();
 
 /* ================= 聊天逻辑 ================= */
 const FAKE_REPLIES = [
