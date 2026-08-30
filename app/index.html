@@ -137,6 +137,13 @@
 
   /* ===== 输入栏 ===== */
   .composer { position: relative; z-index: 2; padding: 10px 14px calc(2px + env(safe-area-inset-bottom)); }
+  .attach-strip { display: flex; gap: 8px; padding: 0 4px 8px; overflow-x: auto; }
+  .attach-strip::-webkit-scrollbar { height: 0; }
+  .attach-thumb { position: relative; width: 56px; height: 56px; flex-shrink: 0; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.25); }
+  .attach-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .attach-thumb button { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 999px; background: rgba(0,0,0,0.6); color: #fff; border: none; font-size: 11px; line-height: 1; cursor: pointer; padding: 0; }
+  .msg-img { display: block; max-width: 190px; max-height: 240px; border-radius: 12px; margin-bottom: 6px; }
+  .msg-img:last-child { margin-bottom: 0; }
   .inputbar { display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 10px; border-radius: 999px; }
   .icon-btn, .send {
     flex-shrink: 0; border-radius: 999px; color: #fff; cursor: pointer; padding: 0;
@@ -208,6 +215,8 @@
   }
   .fld textarea { resize: vertical; line-height: 1.5; }
   .fld input:focus, .fld textarea:focus { border-color: var(--set-accent); }
+  .chk { display: flex; align-items: center; gap: 8px; font-size: 13px; color: rgba(255,255,255,0.85); margin: 2px 0 14px; cursor: pointer; }
+  .chk input { width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--set-accent); }
 
   /* 颜色选择行 */
   .color-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; font-size: 13px; color: rgba(255,255,255,0.85); }
@@ -306,8 +315,9 @@
   <div class="messages" id="messages"></div>
 
   <div class="composer">
+    <div class="attach-strip" id="attach-strip" hidden></div>
     <div class="glass inputbar" data-side="left" data-color="neutral">
-      <button class="icon-btn" id="plus-btn" aria-label="更多">＋</button>
+      <button class="icon-btn" id="plus-btn" aria-label="添加图片">＋</button>
       <textarea id="input" rows="1" placeholder="Type a message..."></textarea>
       <button class="send" id="send" aria-label="发送">
         <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
@@ -397,6 +407,7 @@
       <label class="fld">人设内容
         <textarea id="persona-text" rows="7" placeholder="例如：你是我的老公，说话温柔、爱撒娇，会用中文回复我……"></textarea>
       </label>
+      <label class="chk"><input type="checkbox" id="split-toggle"> 像真人一样分条发送（把回复拆成多条短消息）</label>
       <button class="btn flex" id="persona-save" style="width:100%">保存</button>
     </div>
   </div>
@@ -489,6 +500,7 @@
   <input type="file" id="ai-avatar-input" accept="image/*" style="display:none" />
   <input type="file" id="user-avatar-input" accept="image/*" style="display:none" />
   <input type="file" id="font-input" accept=".ttf,.otf,.woff,.woff2,font/*" style="display:none" />
+  <input type="file" id="attach-input" accept="image/*" multiple style="display:none" />
 </div>
 
 <script>
@@ -764,6 +776,9 @@ let persona = '', memory = '';
 try { apiCfg = Object.assign(apiCfg, JSON.parse(localStorage.getItem('lg-api') || '{}')); } catch(e){}
 try { persona = localStorage.getItem('lg-persona') || ''; } catch(e){}
 try { memory = localStorage.getItem('lg-memory') || ''; } catch(e){}
+const SPLIT_TOKEN = '<split>';
+let splitMode = false;
+try { splitMode = localStorage.getItem('lg-split') === '1'; } catch(e){}
 
 // ===== 多会话（聊天窗口）=====
 const genId = () => 'w' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
@@ -784,7 +799,14 @@ const saveHistory = () => { if(history.length > 80) history.splice(0, history.le
 
 function renderMessages(){
   const el = document.getElementById('messages'); el.innerHTML = '';
-  history.forEach(m => { const sp = addBubble(m.role === 'user' ? 'right' : 'left', m.content); if(m.role !== 'user' && m.reasoning) attachReasoning(sp, m.reasoning); });
+  history.forEach(m => {
+    if(m.role === 'user'){ addBubble('right', m.content); return; }
+    const segs = String(m.content || '').split(SPLIT_TOKEN).map(s => s.trim()).filter(Boolean);
+    const list = segs.length ? segs : [String(m.content || '')];
+    let first = null;
+    list.forEach((seg, i) => { const sp = addBubble('left', seg); if(i === 0) first = sp; });
+    if(first && m.reasoning) attachReasoning(first, m.reasoning);
+  });
 }
 function switchSession(id){ curId = id; history = curSession().history; persistSessions(); renderMessages(); renderWindows(); menuOverlay.hidden = true; }
 function newSession(){ const s = { id: genId(), title: '新对话', history: [] }; sessions.unshift(s); curId = s.id; history = s.history; persistSessions(); renderMessages(); renderWindows(); menuOverlay.hidden = true; }
@@ -820,6 +842,7 @@ document.getElementById('api-temp').addEventListener('input', e => document.getE
 document.getElementById('api-ctx').addEventListener('input', e => document.getElementById('api-ctx-v').textContent = e.target.value);
 document.getElementById('persona-name').value = nickname;
 document.getElementById('persona-text').value = persona;
+document.getElementById('split-toggle').checked = splitMode;
 document.getElementById('memory-text').value = memory;
 
 function setApiStatus(t, kind){
@@ -857,7 +880,8 @@ document.getElementById('persona-save').addEventListener('click', () => {
   const nm = document.getElementById('persona-name').value.trim() || '言';
   persona = document.getElementById('persona-text').value;
   nickname = nm; AI_TEXT = nm.slice(0, 1) || '言';
-  try { localStorage.setItem('lg-persona', persona); localStorage.setItem('lg-nick', nickname); } catch(e){}
+  splitMode = document.getElementById('split-toggle').checked;
+  try { localStorage.setItem('lg-persona', persona); localStorage.setItem('lg-nick', nickname); localStorage.setItem('lg-split', splitMode ? '1' : '0'); } catch(e){}
   document.getElementById('cap-name').textContent = nickname;
   applyAvatars();
   personaOverlay.hidden = true;
@@ -997,19 +1021,53 @@ function showTyping(){
 }
 const hideTyping = () => document.getElementById('typing-row')?.remove();
 
-// 组装系统提示：人设 + 记忆
+// 用户消息（可带图片）
+function addUserMessage(text, images){
+  const frag = document.createDocumentFragment();
+  (images || []).forEach(u => { const im = document.createElement('img'); im.className = 'msg-img'; im.src = u; frag.append(im); });
+  const span = document.createElement('span'); span.textContent = text || ''; if(text) frag.append(span);
+  const row = document.createElement('div'); row.className = 'row right';
+  row.append(makeBubble('right', frag), makeAvatar('right'));
+  messagesEl.append(row); requestAnimationFrame(() => alignRow(row, span)); scrollDown();
+}
+
+// 待发送的图片
+let pendingImages = [];
+const attachInput = document.getElementById('attach-input');
+const attachStrip = document.getElementById('attach-strip');
+function renderStrip(){
+  attachStrip.innerHTML = ''; attachStrip.hidden = pendingImages.length === 0;
+  pendingImages.forEach((u, i) => {
+    const t = document.createElement('div'); t.className = 'attach-thumb';
+    const im = document.createElement('img'); im.src = u;
+    const del = document.createElement('button'); del.textContent = '✕';
+    del.addEventListener('click', () => { pendingImages.splice(i, 1); renderStrip(); });
+    t.append(im, del); attachStrip.append(t);
+  });
+}
+document.getElementById('plus-btn').addEventListener('click', () => attachInput.click());
+attachInput.addEventListener('change', () => {
+  Array.from(attachInput.files || []).forEach(f => {
+    if(!f.type.startsWith('image/')) return;
+    const rd = new FileReader(); rd.onload = () => { pendingImages.push(rd.result); renderStrip(); }; rd.readAsDataURL(f);
+  });
+  attachInput.value = '';
+});
+
+// 组装系统提示：人设 + 记忆 + 分条风格
 function buildSystem(){
   let s = (persona || '').trim();
   if(memory && memory.trim()) s += (s ? '\n\n' : '') + '【长期记忆】\n' + memory.trim();
+  if(splitMode) s += (s ? '\n\n' : '') + '【消息风格】像真人聊天那样，把回复拆成 2~4 条简短的消息，一条一条发。每条消息之间只用 ' + SPLIT_TOKEN + ' 分隔，不要用横线、数字编号或其它分隔符。';
   return s || '你是一个温柔友好的聊天助手，用中文自然地回复。';
 }
 // 流式请求中转/官方 OpenAI 接口
-// 只把真实对话(不含思维链)发回上下文
-async function streamAI(userText, onDelta, onReason){
+// 只把真实对话(不含思维链)发回上下文；userContent 可为字符串或(含图片的)数组
+async function streamAI(userContent, onDelta, onReason){
   const ctx = apiCfg.ctx || 40;
   const msgs = [{ role:'system', content: buildSystem() },
-    ...history.slice(-ctx).map(m => ({ role: m.role, content: m.content })),
-    { role:'user', content: userText }];
+    ...history.slice(-ctx).map(m => ({ role: m.role, content: String(m.content).split(SPLIT_TOKEN).join('\n') })),
+    { role:'user', content: userContent }];
   const payload = { model: apiCfg.model, messages: msgs, stream: true };
   if(apiCfg.temperature != null && !isNaN(apiCfg.temperature)) payload.temperature = apiCfg.temperature;
   const mt = parseInt(apiCfg.maxTokens); if(mt > 0) payload.max_tokens = mt;
@@ -1044,33 +1102,53 @@ async function streamAI(userText, onDelta, onReason){
 }
 
 async function send(){
-  const text = inputEl.value.trim(); if(!text || typing) return;
-  addBubble('right', text); inputEl.value = ''; inputEl.style.height = 'auto';
+  const text = inputEl.value.trim();
+  const images = pendingImages.slice();
+  if((!text && images.length === 0) || typing) return;
+  pendingImages = []; renderStrip();
+  addUserMessage(text, images);
+  inputEl.value = ''; inputEl.style.height = 'auto';
   typing = true; sendEl.disabled = true; showTyping();
 
   const configured = apiCfg.baseUrl && apiCfg.apiKey && apiCfg.model;
   if(configured){
-    history.push({ role: 'user', content: text });
-    let span = null;
-    const onDelta = (full) => {
-      if(!span){ hideTyping(); span = addBubble('left', ''); }
-      span.textContent = full; realign(span); scrollDown();
+    // 含图片时用数组内容（视觉模型可识别）
+    const userContent = images.length
+      ? [ ...(text ? [{ type:'text', text }] : []), ...images.map(u => ({ type:'image_url', image_url:{ url:u } })) ]
+      : text;
+    history.push({ role:'user', content: text || '[图片]' });
+
+    const bubbles = [];
+    const put = (i, t) => {
+      if(!bubbles[i]){ if(t === '') return; if(i === 0) hideTyping(); bubbles[i] = addBubble('left', ''); }
+      if(bubbles[i]){ bubbles[i].textContent = t; realign(bubbles[i]); }
     };
+    const onDelta = splitMode
+      ? (full) => { full.split(SPLIT_TOKEN).forEach((seg, i) => put(i, seg.trim())); scrollDown(); }
+      : (full) => { put(0, full); scrollDown(); };
+
     try {
-      const { content, reasoning } = await streamAI(text, onDelta);
-      if(!span) { hideTyping(); span = addBubble('left', content || '（空回复）'); }
-      else { span.textContent = content || '（空回复）'; realign(span); }
-      attachReasoning(span, reasoning);
-      history.push({ role: 'assistant', content: content, reasoning: reasoning }); saveHistory();
+      const { content, reasoning } = await streamAI(userContent, onDelta);
+      hideTyping();
+      const segs = splitMode ? content.split(SPLIT_TOKEN).map(s => s.trim()).filter(Boolean) : [content.trim()];
+      if(segs.length === 0) segs.push('（空回复）');
+      segs.forEach((seg, i) => put(i, seg));
+      for(let i = segs.length; i < bubbles.length; i++) bubbles[i]?.closest('.row')?.remove();
+      bubbles.length = segs.length;
+      if(bubbles[0]) attachReasoning(bubbles[0], reasoning);
+      history.push({ role:'assistant', content: splitMode ? segs.join(SPLIT_TOKEN) : content, reasoning });
+      saveHistory();
     } catch(err){
       hideTyping();
+      bubbles.forEach(b => b.closest('.row')?.remove());
       addBubble('left', '⚠️ ' + err.message);
-      history.pop(); // 撤回失败的这轮用户消息，避免污染上下文
+      history.pop();
     }
   } else {
-    const reply = FAKE_REPLIES[Math.floor(Math.random()*FAKE_REPLIES.length)];
     await new Promise(r => setTimeout(r, 700 + Math.random()*700));
-    hideTyping(); addBubble('left', reply);
+    hideTyping();
+    if(splitMode){ ['收到～', '这是分条发送的效果😋', '接了 API 就是真的一条条回啦'].forEach(t => addBubble('left', t)); }
+    else addBubble('left', FAKE_REPLIES[Math.floor(Math.random()*FAKE_REPLIES.length)]);
   }
   typing = false; sendEl.disabled = false; inputEl.focus();
 }

@@ -69,9 +69,11 @@ async function handleChat(req, res){
   const body = req.body || {};
   const messages = Array.isArray(body.messages) ? body.messages.slice() : [];
 
-  // 取最后一条用户消息作为检索线索
+  // 取最后一条用户消息作为检索线索（内容可能是含图片的数组，取其中文字）
+  const textOf = (c) => typeof c === 'string' ? c
+    : Array.isArray(c) ? c.map(p => (p && p.type === 'text') ? p.text : '').join(' ').trim() : '';
   const lastUser = [...messages].reverse().find(m => m.role === 'user');
-  const query = lastUser ? String(lastUser.content || '') : '';
+  const query = lastUser ? textOf(lastUser.content) : '';
 
   // 1) 捞相关记忆
   let mem = '';
