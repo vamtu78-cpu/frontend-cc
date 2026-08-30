@@ -7,6 +7,10 @@
     background: #0b1016;
     display: flex; align-items: center; justify-content: center; min-height: 100%;
   }
+  :root {
+    --bub-radius: 23px; --bub-padx: 20px; --bub-pady: 11px; --bub-maxw: 72%;
+    --set-bg: rgba(22,28,36,0.86); --set-accent: #8fa2c9;
+  }
 
   .phone {
     position: relative; isolation: isolate;
@@ -41,21 +45,18 @@
   }
   .glass-circle svg { width: 22px; height: 22px; }
 
-  /* 名称胶囊：左头像 + 右昵称，宽度自适应 */
   .name-capsule {
     display: inline-flex; align-items: center; gap: 9px;
-    padding: 5px 18px 5px 5px; border-radius: 999px;
-    max-width: 62%;
+    padding: 5px 18px 5px 5px; border-radius: 999px; max-width: 62%;
   }
   .cap-avatar {
     width: 34px; height: 34px; flex-shrink: 0; border-radius: 999px;
     display: flex; align-items: center; justify-content: center;
     font-size: 16px; font-weight: 600; color: #fff;
     background: linear-gradient(135deg, #7c8ce0, #cf6bd6);
-    box-shadow: inset 0 1px 2px rgba(255,255,255,0.4);
-    overflow: hidden;
+    box-shadow: inset 0 1px 2px rgba(255,255,255,0.4); overflow: hidden;
   }
-  .cap-avatar img, .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .cap-avatar img, .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .cap-name { font-size: 16px; font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.3); white-space: nowrap; }
   .topbar-spacer { width: 46px; flex-shrink: 0; }
 
@@ -68,8 +69,9 @@
   }
   .messages::-webkit-scrollbar { width: 0; }
 
-  .row { display: flex; align-items: flex-end; gap: 8px; animation: fadeUp 0.3s ease-out; }
+  .row { display: flex; align-items: center; gap: 8px; animation: fadeUp 0.3s ease-out; }
   .row.right { justify-content: flex-end; }
+  .row.multiline { align-items: flex-start; }
 
   .avatar {
     width: 34px; height: 34px; flex-shrink: 0; border-radius: 999px;
@@ -84,13 +86,11 @@
   .message {
     position: relative;
     display: inline-flex; align-items: center;
-    max-width: 72%; min-height: 46px;
-    padding: 11px 20px;
-    border-radius: 26px;
+    max-width: var(--bub-maxw); min-height: 44px;
+    padding: var(--bub-pady) var(--bub-padx);
+    border-radius: var(--bub-radius);
     font-size: 17px; line-height: 1.45;
   }
-  .message.left  { border-bottom-left-radius: 10px; }
-  .message.right { border-bottom-right-radius: 10px; }
   .message span {
     position: relative; z-index: 2;
     white-space: pre-wrap; word-break: break-word;
@@ -107,14 +107,8 @@
   .typing i:nth-child(3) { animation-delay: 0.4s; }
 
   /* ===== 输入栏 ===== */
-  .composer {
-    position: relative; z-index: 2;
-    padding: 10px 14px calc(12px + env(safe-area-inset-bottom));
-  }
-  .inputbar {
-    display: flex; align-items: center; gap: 10px;
-    padding: 7px 8px 7px 10px; border-radius: 999px;
-  }
+  .composer { position: relative; z-index: 2; padding: 10px 14px calc(12px + env(safe-area-inset-bottom)); }
+  .inputbar { display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 10px; border-radius: 999px; }
   .icon-btn, .send {
     flex-shrink: 0; border-radius: 999px; color: #fff; cursor: pointer; padding: 0;
     display: flex; align-items: center; justify-content: center;
@@ -132,20 +126,17 @@
   }
   textarea::placeholder { color: rgba(255,255,255,0.6); }
 
-  /* ===== 覆盖层（抽屉 / 设置）===== */
-  .overlay {
-    position: absolute; inset: 0; z-index: 10;
+  /* ===== 功能抽屉 ===== */
+  .overlay { position: absolute; inset: 0; z-index: 10; display: flex; }
+  .overlay[hidden] { display: none; }
+  #menu-overlay {
+    justify-content: flex-start;
     background: rgba(8,12,18,0.35);
     backdrop-filter: blur(18px) saturate(120%); -webkit-backdrop-filter: blur(18px) saturate(120%);
-    display: flex;
   }
-  .overlay[hidden] { display: none; }
-
-  /* 功能抽屉：左侧滑入 */
-  #menu-overlay { justify-content: flex-start; }
   .drawer {
     width: 264px; height: 100%; padding: 26px 16px;
-    background: rgba(22,28,36,0.7);
+    background: var(--set-bg);
     border-right: 1px solid rgba(255,255,255,0.14);
     box-shadow: 20px 0 60px -20px rgba(0,0,0,0.7);
     animation: slideIn 0.25s cubic-bezier(0.2,0.8,0.2,1);
@@ -153,8 +144,7 @@
   }
   .drawer-title { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.5); margin: 6px 8px 14px; }
   .menu-item {
-    display: flex; align-items: center; gap: 12px;
-    width: 100%; padding: 12px 14px; border-radius: 16px;
+    display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border-radius: 16px;
     background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
     color: #fff; font-size: 15px; cursor: pointer; text-align: left;
   }
@@ -162,32 +152,35 @@
   .mi-icon { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; }
   .mi-icon svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; }
 
-  /* 设置页：居中卡片 */
-  #settings-overlay { align-items: center; justify-content: center; padding: 24px; }
+  /* ===== 设置：底部弹出面板（上方露出真实聊天=实时预览）===== */
+  #settings-overlay { align-items: flex-end; background: transparent; }
   .sheet {
-    width: 100%; max-width: 320px; max-height: 82%; overflow-y: auto;
-    padding: 20px 20px 22px; border-radius: 24px;
-    background: rgba(22,28,36,0.78);
-    border: 1px solid rgba(255,255,255,0.16);
-    box-shadow: 0 24px 60px -14px rgba(0,0,0,0.75);
-    animation: fadeUp 0.22s ease-out;
+    width: 100%; max-height: 70%; overflow-y: auto;
+    padding: 10px 20px 22px; border-radius: 26px 26px 0 0;
+    background: var(--set-bg);
+    border-top: 1px solid rgba(255,255,255,0.18);
+    box-shadow: 0 -20px 60px -14px rgba(0,0,0,0.7);
+    animation: sheetUp 0.26s cubic-bezier(0.2,0.8,0.2,1);
   }
   .sheet::-webkit-scrollbar { width: 0; }
-  .sheet-title { font-size: 18px; font-weight: 700; margin: 0 0 16px; }
+  .grab { width: 40px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.3); margin: 2px auto 12px; }
+  .sheet-title { font-size: 18px; font-weight: 700; margin: 0 0 4px; }
+  .sheet-hint { font-size: 12px; color: rgba(255,255,255,0.5); margin: 0 0 16px; }
   .sec { margin-bottom: 20px; }
   .sec-head {
     display: flex; align-items: center; justify-content: space-between;
     font-size: 13px; letter-spacing: 0.05em; color: rgba(255,255,255,0.55);
     text-transform: uppercase; margin-bottom: 10px;
   }
+  .btn-row { display: flex; gap: 10px; }
   .btn {
     color: #fff; cursor: pointer; font-size: 14px;
-    background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.2);
-    border-radius: 999px; padding: 9px 16px;
+    background: color-mix(in srgb, var(--set-accent) 32%, transparent);
+    border: 1px solid rgba(255,255,255,0.22); border-radius: 999px; padding: 9px 16px;
   }
   .btn.small { font-size: 12px; padding: 4px 12px; }
-  .btn.block { width: 100%; text-align: center; }
-  .sheet label { display: block; font-size: 12px; color: rgba(255,255,255,0.8); margin-bottom: 12px; }
+  .btn.flex { flex: 1; text-align: center; }
+  .sheet label { display: block; font-size: 12px; color: rgba(255,255,255,0.82); margin-bottom: 12px; }
   .sheet output { float: right; font-variant-numeric: tabular-nums; color: #fff; font-weight: 600; }
   .sheet input[type=range] {
     -webkit-appearance: none; appearance: none; width: 100%; height: 4px;
@@ -195,14 +188,15 @@
   }
   .sheet input[type=range]::-webkit-slider-thumb {
     -webkit-appearance: none; width: 18px; height: 18px; border-radius: 999px;
-    background: #fff; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    background: var(--set-accent); cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.4);
   }
   .sheet input[type=range]::-moz-range-thumb {
-    width: 18px; height: 18px; border: none; border-radius: 999px; background: #fff; cursor: pointer;
+    width: 18px; height: 18px; border: none; border-radius: 999px; background: var(--set-accent); cursor: pointer;
   }
 
   @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes slideIn { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+  @keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
   @keyframes bounceDot { 0%,80%,100% { transform: translateY(0); opacity: 0.4; } 40% { transform: translateY(-4px); opacity: 1; } }
   @media (prefers-reduced-motion: reduce) { .row, .typing i, .drawer, .sheet { animation: none; } }
 </style>
@@ -210,7 +204,6 @@
 <div class="phone" id="phone">
   <canvas id="gl"></canvas>
 
-  <!-- 顶栏 -->
   <div class="topbar">
     <button class="glass glass-circle" id="menu-btn" aria-label="菜单" data-side="left">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
@@ -247,14 +240,32 @@
     </div>
   </div>
 
-  <!-- 设置页 -->
+  <!-- 设置底部面板 -->
   <div class="overlay" id="settings-overlay" hidden>
     <div class="sheet" id="settings-sheet">
+      <div class="grab"></div>
       <div class="sheet-title">设置</div>
+      <p class="sheet-hint">上方即实时预览，拖动滑块立即生效</p>
+
+      <div class="sec">
+        <div class="sec-head"><span>头像</span></div>
+        <div class="btn-row">
+          <button class="btn flex" id="ai-avatar-btn">AI 头像</button>
+          <button class="btn flex" id="user-avatar-btn">我的头像</button>
+        </div>
+      </div>
 
       <div class="sec">
         <div class="sec-head"><span>壁纸</span></div>
-        <button class="btn block" id="wallpaper-btn">更换壁纸</button>
+        <button class="btn flex" id="wallpaper-btn" style="width:100%">更换壁纸</button>
+      </div>
+
+      <div class="sec">
+        <div class="sec-head"><span>气泡形状</span></div>
+        <label>圆角 <output id="v-bubRadius"></output><input type="range" id="r-bubRadius" min="8" max="40" step="1"></label>
+        <label>左右宽度 <output id="v-bubPadX"></output><input type="range" id="r-bubPadX" min="8" max="40" step="1"></label>
+        <label>上下高度 <output id="v-bubPadY"></output><input type="range" id="r-bubPadY" min="6" max="22" step="1"></label>
+        <label>最大宽度 <output id="v-bubMaxW"></output><input type="range" id="r-bubMaxW" min="50" max="92" step="1"></label>
       </div>
 
       <div class="sec">
@@ -270,17 +281,37 @@
   </div>
 
   <input type="file" id="wallpaper-input" accept="image/*" style="display:none" />
+  <input type="file" id="ai-avatar-input" accept="image/*" style="display:none" />
+  <input type="file" id="user-avatar-input" accept="image/*" style="display:none" />
 </div>
 
 <script>
-/* ===== 昵称 / 头像（AI 头像 = 胶囊头像，两处同步）===== */
+/* ===== 昵称 / 头像 ===== */
 const NICKNAME = '言';
-const AI_AVATAR = NICKNAME.slice(0, 1); // 也可换成 emoji 或图片
-const USER_AVATAR = '🧑';
-document.getElementById('cap-name').textContent = NICKNAME;
-document.getElementById('cap-avatar').textContent = AI_AVATAR;
+const AI_TEXT = NICKNAME.slice(0, 1);
+const USER_TEXT = '🧑';
+let aiAvatarSrc = null, userAvatarSrc = null;
+try { aiAvatarSrc = localStorage.getItem('lg-ai-avatar') || null; userAvatarSrc = localStorage.getItem('lg-user-avatar') || null; } catch(e){}
 
-/* ========================================================= 液态玻璃 WebGL ========================================================= */
+document.getElementById('cap-name').textContent = NICKNAME;
+function avatarHTML(side){
+  const src = side === 'right' ? userAvatarSrc : aiAvatarSrc;
+  if(src) return '<img src="' + src + '" alt="">';
+  return side === 'right' ? USER_TEXT : AI_TEXT;
+}
+function applyAvatars(){
+  const cap = document.getElementById('cap-avatar');
+  cap.innerHTML = avatarHTML('left');
+  document.querySelectorAll('.avatar-ai').forEach(a => a.innerHTML = avatarHTML('left'));
+  document.querySelectorAll('.avatar-user').forEach(a => a.innerHTML = avatarHTML('right'));
+}
+function setAvatar(side, dataURL){
+  if(side === 'right'){ userAvatarSrc = dataURL; try { localStorage.setItem('lg-user-avatar', dataURL); } catch(e){} }
+  else { aiAvatarSrc = dataURL; try { localStorage.setItem('lg-ai-avatar', dataURL); } catch(e){} }
+  applyAvatars();
+}
+
+/* ===== 液态玻璃 WebGL ===== */
 const MAX = 28;
 const VERT = `attribute vec2 a; void main(){ gl_Position = vec4(a,0.0,1.0); }`;
 const FRAG = `
@@ -335,10 +366,20 @@ const canvas = document.getElementById('gl');
 let gl, prog, loc = {}, tex, dpr = Math.min(devicePixelRatio || 1, 2);
 let light = [0.0, -1.0];
 
-const DEFAULTS = { strength: 48, edge: 12, rimPow: 2.4, chroma: 0.32, glow: 0.20, tint: 0.06 };
+const DEFAULTS = { strength:48, edge:12, rimPow:2.4, chroma:0.32, glow:0.20, tint:0.06,
+                   bubRadius:23, bubPadX:20, bubPadY:11, bubMaxW:72 };
 let params = Object.assign({}, DEFAULTS);
 try { const s = JSON.parse(localStorage.getItem('lg-params') || 'null'); if(s) params = Object.assign({}, DEFAULTS, s); } catch(e){}
 const saveParams = () => { try { localStorage.setItem('lg-params', JSON.stringify(params)); } catch(e){} };
+
+function setBubbleVars(){
+  const r = document.documentElement.style;
+  r.setProperty('--bub-radius', params.bubRadius + 'px');
+  r.setProperty('--bub-padx', params.bubPadX + 'px');
+  r.setProperty('--bub-pady', params.bubPadY + 'px');
+  r.setProperty('--bub-maxw', params.bubMaxW + '%');
+}
+setBubbleVars();
 
 function compile(t, src){ const s = gl.createShader(t); gl.shaderSource(s, src); gl.compileShader(s);
   if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
@@ -387,9 +428,23 @@ function buildBackground(w, h){
   x.fillStyle = 'rgba(120,132,148,0.10)'; x.fillRect(0,0,w,h);
   return c;
 }
+// 设置面板配色跟随聊天背景（取背景平均色）
+function computeTheme(){
+  const s = document.createElement('canvas'); s.width = s.height = 24; const sx = s.getContext('2d');
+  sx.drawImage(buildBackground(24, 24), 0, 0);
+  const d = sx.getImageData(0,0,24,24).data; let r=0,g=0,b=0,c=0;
+  for(let i=0;i<d.length;i+=4){ r+=d[i]; g+=d[i+1]; b+=d[i+2]; c++; }
+  r/=c; g/=c; b/=c;
+  const dk = v => Math.round(v*0.34 + 12);
+  const ac = v => Math.min(255, Math.round(v*1.1 + 55));
+  const rs = document.documentElement.style;
+  rs.setProperty('--set-bg', `rgba(${dk(r)},${dk(g)},${dk(b)},0.88)`);
+  rs.setProperty('--set-accent', `rgb(${ac(r)},${ac(g)},${ac(b)})`);
+}
 function updateTexture(){ if(!gl) return;
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, buildBackground(canvas.width, canvas.height));
+  computeTheme();
 }
 function setWallpaper(dataURL, remember){
   const img = new Image();
@@ -406,6 +461,7 @@ function resize(){
   gl.uniform2f(loc.uRes, w, h);
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, buildBackground(w, h));
+  computeTheme();
 }
 function frame(){
   resize();
@@ -447,45 +503,51 @@ const menuOverlay = document.getElementById('menu-overlay');
 const settingsOverlay = document.getElementById('settings-overlay');
 document.getElementById('menu-btn').addEventListener('click', () => { menuOverlay.hidden = false; });
 document.getElementById('open-settings').addEventListener('click', () => { menuOverlay.hidden = true; settingsOverlay.hidden = false; });
-// 点空白区域回到聊天
 menuOverlay.addEventListener('click', (e) => { if(e.target === menuOverlay) menuOverlay.hidden = true; });
 settingsOverlay.addEventListener('click', (e) => { if(e.target === settingsOverlay) settingsOverlay.hidden = true; });
 
-/* ===== 壁纸 ===== */
-const wpInput = document.getElementById('wallpaper-input');
-document.getElementById('wallpaper-btn').addEventListener('click', () => wpInput.click());
-wpInput.addEventListener('change', () => {
-  const f = wpInput.files && wpInput.files[0]; if(!f) return;
-  const rd = new FileReader(); rd.onload = () => setWallpaper(rd.result, true); rd.readAsDataURL(f);
-});
+/* ===== 图片上传（壁纸 / 头像）===== */
+function bindPicker(btnId, inputId, onData){
+  const input = document.getElementById(inputId);
+  document.getElementById(btnId).addEventListener('click', () => input.click());
+  input.addEventListener('change', () => {
+    const f = input.files && input.files[0]; if(!f) return;
+    const rd = new FileReader(); rd.onload = () => onData(rd.result); rd.readAsDataURL(f); input.value = '';
+  });
+}
+bindPicker('wallpaper-btn', 'wallpaper-input', d => setWallpaper(d, true));
+bindPicker('ai-avatar-btn', 'ai-avatar-input', d => setAvatar('left', d));
+bindPicker('user-avatar-btn', 'user-avatar-input', d => setAvatar('right', d));
 phone.addEventListener('dragover', (e) => e.preventDefault());
 phone.addEventListener('drop', (e) => { e.preventDefault();
   const f = e.dataTransfer.files && e.dataTransfer.files[0];
   if(f && f.type.startsWith('image/')){ const rd = new FileReader(); rd.onload = () => setWallpaper(rd.result, true); rd.readAsDataURL(f); } });
 try { const saved = localStorage.getItem('lg-wallpaper'); if(saved) setWallpaper(saved, false); } catch(e){}
 
-/* ===== 调节滑块 ===== */
-const KEYS = ['strength','edge','rimPow','chroma','glow','tint'];
-const fmt = (k,v) => (k==='strength'||k==='edge') ? Math.round(v) : (k==='rimPow') ? v.toFixed(1) : v.toFixed(2);
+/* ===== 滑块 ===== */
+const KEYS = ['strength','edge','rimPow','chroma','glow','tint','bubRadius','bubPadX','bubPadY','bubMaxW'];
+const INT = { strength:1, edge:1, bubRadius:1, bubPadX:1, bubPadY:1, bubMaxW:1 };
+const fmt = (k,v) => INT[k] ? Math.round(v) : (k==='rimPow') ? v.toFixed(1) : v.toFixed(2);
 function syncPanel(){ KEYS.forEach(k => { document.getElementById('r-'+k).value = params[k]; document.getElementById('v-'+k).textContent = fmt(k, params[k]); }); }
 KEYS.forEach(k => document.getElementById('r-'+k).addEventListener('input', (e) => {
-  params[k] = parseFloat(e.target.value); document.getElementById('v-'+k).textContent = fmt(k, params[k]); saveParams(); }));
-document.getElementById('panel-reset').addEventListener('click', () => { params = Object.assign({}, DEFAULTS); syncPanel(); saveParams(); });
+  params[k] = parseFloat(e.target.value); document.getElementById('v-'+k).textContent = fmt(k, params[k]);
+  setBubbleVars(); saveParams(); }));
+document.getElementById('panel-reset').addEventListener('click', () => { params = Object.assign({}, DEFAULTS); syncPanel(); setBubbleVars(); saveParams(); });
 syncPanel();
 
-/* ========================================================= 聊天逻辑 ========================================================= */
+/* ===== 聊天逻辑 ===== */
 const FAKE_REPLIES = [
-  '收到～界面重构好啦：胶囊名称 + 双头像🥰',
-  '左边我的头像和上面胶囊里的是同一个哦。',
-  '点左上角三条杠可以打开功能，里面有设置。',
-  '设置里能换壁纸、调玻璃，点空白处就回来。',
-  '喜欢的话就把它接上真 AI 吧🧊',
+  '收到～头像现在垂直居中啦，长消息才顶端对齐。',
+  '这是一条比较长的消息，用来测试多行时头像自动贴到气泡顶端，看看对不对齐～',
+  '气泡形状能在设置里调圆角、宽高和最大宽度。',
+  '设置面板的配色会跟着你的壁纸变哦。',
+  '喜欢的话就接上真 AI 吧🧊',
 ];
 const seed = [
   ['right', '老公 教我一句外语'],
   ['left', '教你一句意大利语。\n"Sei mia。"\n先说出来。'],
   ['right', 'Sei mia'],
-  ['left', '"你是我的。"\n就是这个意思。'],
+  ['left', '"你是我的。"就是这个意思。'],
 ];
 
 const messagesEl = document.getElementById('messages');
@@ -497,7 +559,7 @@ const scrollDown = () => messagesEl.scrollTo({ top: messagesEl.scrollHeight, beh
 function makeAvatar(side){
   const a = document.createElement('span');
   a.className = 'avatar ' + (side === 'right' ? 'avatar-user' : 'avatar-ai');
-  a.textContent = side === 'right' ? USER_AVATAR : AI_AVATAR;
+  a.innerHTML = avatarHTML(side);
   return a;
 }
 function makeBubble(side, inner){
@@ -505,18 +567,25 @@ function makeBubble(side, inner){
   msg.className = 'message glass ' + side; msg.dataset.side = side;
   msg.append(inner); return msg;
 }
+// 单行居中，多行顶端对齐
+function alignRow(row, span){
+  const lh = parseFloat(getComputedStyle(span).lineHeight) || 24;
+  const lines = span.offsetHeight / lh;
+  row.classList.toggle('multiline', lines > 1.35);
+}
 function addBubble(side, text){
   const row = document.createElement('div'); row.className = 'row ' + side;
   const span = document.createElement('span'); span.textContent = text;
   const bubble = makeBubble(side, span);
   if(side === 'right') { row.append(bubble, makeAvatar('right')); }
   else { row.append(makeAvatar('left'), bubble); }
-  messagesEl.append(row); scrollDown();
+  messagesEl.append(row);
+  requestAnimationFrame(() => alignRow(row, span));
+  scrollDown();
 }
 function showTyping(){
   const row = document.createElement('div'); row.className = 'row left'; row.id = 'typing-row';
-  const dots = document.createElement('span'); dots.className = 'typing';
-  dots.innerHTML = '<i></i><i></i><i></i>';
+  const dots = document.createElement('span'); dots.className = 'typing'; dots.innerHTML = '<i></i><i></i><i></i>';
   row.append(makeAvatar('left'), makeBubble('left', dots));
   messagesEl.append(row); scrollDown();
 }
@@ -535,8 +604,9 @@ inputEl.addEventListener('keydown', e => { if(e.key==='Enter' && !e.shiftKey){ e
 inputEl.addEventListener('input', () => { inputEl.style.height='auto'; inputEl.style.height = Math.min(inputEl.scrollHeight,110)+'px'; });
 
 seed.forEach(([s,t]) => addBubble(s,t));
+applyAvatars();
 
-/* 启动 WebGL，失败退回磨砂 */
+/* 启动 WebGL */
 try {
   if(initGL()){ requestAnimationFrame(frame); } else throw new Error('no webgl');
 } catch(err){
