@@ -30,6 +30,11 @@ jobs:
           TARGET_DIR: ${{ secrets.TARGET_DIR }}
         run: |
           set -e
+          if [ -z "$SSH_HOST" ] || [ -z "$SSH_USER" ] || [ -z "$SSH_KEY" ]; then
+            echo "⏭️  尚未配置部署 Secret（SSH_HOST / SSH_USER / SSH_KEY），跳过部署。"
+            echo "   请参考仓库里的 AUTO_DEPLOY.md 在 Settings → Secrets and variables → Actions 添加后再推。"
+            exit 0
+          fi
           PORT="${SSH_PORT:-22}"
           DIR="${TARGET_DIR:-/var/www/liquid-chat}"
           mkdir -p ~/.ssh
