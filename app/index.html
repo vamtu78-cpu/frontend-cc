@@ -59,7 +59,7 @@
     display: flex; align-items: center; justify-content: space-between;
     gap: 8px;
     /* 顶部叠加安全区，避开灵动岛/状态栏 */
-    padding: calc(14px + env(safe-area-inset-top)) 16px 12px;
+    padding: calc(4px + env(safe-area-inset-top)) 16px 10px;
   }
   .glass {
     background: transparent;
@@ -85,7 +85,7 @@
     background: linear-gradient(135deg, #7c8ce0, #cf6bd6);
     box-shadow: inset 0 1px 2px rgba(255,255,255,0.4); overflow: hidden;
   }
-  .cap-avatar img, .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .cap-avatar img, .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 999px; }
   .cap-name { font-size: 16px; font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.3); white-space: nowrap; }
   .topbar-spacer { width: 46px; flex-shrink: 0; }
 
@@ -181,6 +181,20 @@
   .mi-icon { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; }
   .mi-icon svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; }
 
+  /* 聊天窗口列表 */
+  #window-list { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .win-item {
+    display: flex; align-items: center; gap: 6px; padding: 9px 12px; border-radius: 12px;
+    background: rgba(255,255,255,0.04); border: 1px solid transparent; cursor: pointer;
+  }
+  .win-item.active { background: color-mix(in srgb, var(--set-accent) 28%, transparent); border-color: rgba(255,255,255,0.18); }
+  .win-title { flex: 1; font-size: 13px; color: rgba(255,255,255,0.9); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .win-del {
+    flex-shrink: 0; width: 22px; height: 22px; border-radius: 999px; padding: 0;
+    background: transparent; border: none; color: rgba(255,255,255,0.5); font-size: 13px; cursor: pointer;
+  }
+  .win-del:hover { color: #ff9a9a; }
+
   /* ===== 设置：底部弹出面板（上方露出真实聊天=实时预览）===== */
   #settings-overlay, .overlay.bottom { align-items: flex-end; background: transparent; }
   /* 面板里的文字输入 */
@@ -206,12 +220,12 @@
     max-height: 60vh; overflow-y: auto; padding-bottom: 6px;
   }
   .think-body::-webkit-scrollbar { width: 0; }
-  /* 有思考过程的 AI 头像：可点 + 小标记 */
-  .avatar.has-think { cursor: pointer; position: relative; }
+  /* 有思考过程的 AI 头像：可点 + 右上角 ✦ 标记(头像外) */
+  .avatar.has-think { cursor: pointer; position: relative; overflow: visible; }
   .avatar.has-think::after {
-    content: ''; position: absolute; right: -1px; bottom: -1px;
-    width: 11px; height: 11px; border-radius: 999px;
-    background: var(--set-accent); border: 2px solid rgba(0,0,0,0.35);
+    content: '✦'; position: absolute; top: -7px; right: -7px;
+    font-size: 13px; line-height: 1; color: #fff;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.6); pointer-events: none;
   }
   .sheet {
     width: 100%; max-height: 70%; overflow-y: auto;
@@ -290,7 +304,14 @@
   <!-- 功能抽屉 -->
   <div class="overlay" id="menu-overlay" hidden>
     <div class="drawer" id="drawer">
-      <div class="drawer-title">功能</div>
+      <div class="drawer-title">聊天窗口</div>
+      <button class="menu-item" id="new-chat">
+        <span class="mi-icon"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+        <span>新建对话</span>
+      </button>
+      <div id="window-list"></div>
+
+      <div class="drawer-title" style="margin-top:18px">功能</div>
       <button class="menu-item" id="open-settings">
         <span class="mi-icon">
           <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -397,7 +418,6 @@
       <div class="sec">
         <div class="sec-head"><span>壁纸</span></div>
         <button class="btn flex" id="wallpaper-btn" style="width:100%">更换壁纸</button>
-        <label style="margin-top:14px">壁纸模糊 <output id="v-bgBlur"></output><input type="range" id="r-bgBlur" min="0" max="30" step="1"></label>
       </div>
 
       <div class="sec">
@@ -535,7 +555,7 @@ let gl, prog, loc = {}, tex, dpr = Math.min(devicePixelRatio || 1, 2);
 let light = [0.0, -1.0];
 
 const DEFAULTS = { strength:48, edge:12, rimPow:2.4, chroma:0.32, glow:0.20, tint:0.06, glassBlur:0,
-                   scale:1, bubRadius:23, bubPadX:20, bubPadY:11, bubMaxW:72, bgBlur:0 };
+                   scale:1, bubRadius:23, bubPadX:20, bubPadY:9, bubMaxW:72 };
 let params = Object.assign({}, DEFAULTS);
 try { const s = JSON.parse(localStorage.getItem('lg-params') || 'null'); if(s) params = Object.assign({}, DEFAULTS, s); } catch(e){}
 const saveParams = () => { try { localStorage.setItem('lg-params', JSON.stringify(params)); } catch(e){} };
@@ -599,21 +619,7 @@ function renderScene(w, h){
   x.fillStyle = 'rgba(120,132,148,0.10)'; x.fillRect(0,0,w,h);
   return c;
 }
-// 壁纸模糊：缩小再放大(降采样)，iOS Safari 也支持，不依赖 ctx.filter
-function buildBackground(w, h){
-  const full = renderScene(w, h);
-  const blur = params.bgBlur || 0;
-  if(blur <= 0.5) return full;
-  const factor = 1 + (blur * (w / 402)) / 3;       // 模糊越大，缩得越小
-  const sw = Math.max(2, Math.round(w / factor)), sh = Math.max(2, Math.round(h / factor));
-  const tmp = document.createElement('canvas'); tmp.width = sw; tmp.height = sh;
-  const tx = tmp.getContext('2d'); tx.imageSmoothingEnabled = true; tx.imageSmoothingQuality = 'high';
-  tx.drawImage(full, 0, 0, sw, sh);
-  const out = document.createElement('canvas'); out.width = w; out.height = h;
-  const ox = out.getContext('2d'); ox.imageSmoothingEnabled = true; ox.imageSmoothingQuality = 'high';
-  ox.drawImage(tmp, 0, 0, sw, sh, 0, 0, w, h);
-  return out;
-}
+function buildBackground(w, h){ return renderScene(w, h); }
 // 设置面板配色跟随聊天背景（取背景平均色）
 function computeTheme(){
   const s = document.createElement('canvas'); s.width = s.height = 24; const sx = s.getContext('2d');
@@ -704,14 +710,54 @@ document.getElementById('open-api').addEventListener('click', () => openSheet(ap
 document.getElementById('open-persona').addEventListener('click', () => openSheet(personaOverlay));
 document.getElementById('open-memory').addEventListener('click', () => openSheet(memoryOverlay));
 
-// 存储：API / 人设 / 记忆 / 历史
+// 存储：API / 人设 / 记忆
 let apiCfg = { baseUrl:'', apiKey:'', model:'' };
-let persona = '', memory = '', history = [];
+let persona = '', memory = '';
 try { apiCfg = Object.assign(apiCfg, JSON.parse(localStorage.getItem('lg-api') || '{}')); } catch(e){}
 try { persona = localStorage.getItem('lg-persona') || ''; } catch(e){}
 try { memory = localStorage.getItem('lg-memory') || ''; } catch(e){}
-try { history = JSON.parse(localStorage.getItem('lg-history') || '[]') || []; } catch(e){}
-const saveHistory = () => { try { localStorage.setItem('lg-history', JSON.stringify(history.slice(-60))); } catch(e){} };
+
+// ===== 多会话（聊天窗口）=====
+const genId = () => 'w' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+const sessTitle = (h) => { const u = h.find(m => m.role === 'user'); return u ? u.content.slice(0,14) : '新对话'; };
+let sessions = [], curId = null;
+try { sessions = JSON.parse(localStorage.getItem('lg-sessions') || '[]') || []; } catch(e){}
+try { curId = localStorage.getItem('lg-cur') || null; } catch(e){}
+if(!sessions.length){
+  let old = [];
+  try { old = JSON.parse(localStorage.getItem('lg-history') || '[]') || []; } catch(e){}
+  sessions = [{ id: genId(), title: sessTitle(old), history: old }];
+}
+if(!curId || !sessions.find(s => s.id === curId)) curId = sessions[0].id;
+const curSession = () => sessions.find(s => s.id === curId) || sessions[0];
+let history = curSession().history;
+function persistSessions(){ try { localStorage.setItem('lg-sessions', JSON.stringify(sessions)); localStorage.setItem('lg-cur', curId); } catch(e){} }
+const saveHistory = () => { if(history.length > 80) history.splice(0, history.length - 80); curSession().title = sessTitle(history); persistSessions(); renderWindows(); };
+
+function renderMessages(){
+  const el = document.getElementById('messages'); el.innerHTML = '';
+  history.forEach(m => { const sp = addBubble(m.role === 'user' ? 'right' : 'left', m.content); if(m.role !== 'user' && m.reasoning) attachReasoning(sp, m.reasoning); });
+}
+function switchSession(id){ curId = id; history = curSession().history; persistSessions(); renderMessages(); renderWindows(); menuOverlay.hidden = true; }
+function newSession(){ const s = { id: genId(), title: '新对话', history: [] }; sessions.unshift(s); curId = s.id; history = s.history; persistSessions(); renderMessages(); renderWindows(); menuOverlay.hidden = true; }
+function deleteSession(id){
+  sessions = sessions.filter(s => s.id !== id);
+  if(!sessions.length) sessions = [{ id: genId(), title: '新对话', history: [] }];
+  if(curId === id){ curId = sessions[0].id; history = curSession().history; renderMessages(); }
+  persistSessions(); renderWindows();
+}
+function renderWindows(){
+  const list = document.getElementById('window-list'); list.innerHTML = '';
+  sessions.forEach(s => {
+    const item = document.createElement('div'); item.className = 'win-item' + (s.id === curId ? ' active' : '');
+    const t = document.createElement('span'); t.className = 'win-title'; t.textContent = s.title || '新对话';
+    t.addEventListener('click', () => switchSession(s.id));
+    const del = document.createElement('button'); del.className = 'win-del'; del.textContent = '✕';
+    del.addEventListener('click', (e) => { e.stopPropagation(); deleteSession(s.id); });
+    item.append(t, del); list.append(item);
+  });
+}
+document.getElementById('new-chat').addEventListener('click', newSession);
 
 // 回填
 document.getElementById('api-base').value = apiCfg.baseUrl || '';
@@ -764,7 +810,7 @@ document.getElementById('memory-save').addEventListener('click', () => {
   memoryOverlay.hidden = true;
 });
 document.getElementById('clear-history').addEventListener('click', () => {
-  history = []; saveHistory();
+  history.splice(0, history.length); saveHistory();
   document.getElementById('messages').innerHTML = '';
   memoryOverlay.hidden = true;
 });
@@ -809,30 +855,21 @@ document.getElementById('font-reset').addEventListener('click', () => {
 try { const sf = localStorage.getItem('lg-font'); if(sf) applyFont(sf); } catch(e){}
 
 /* ===== 滑块 ===== */
-const KEYS = ['strength','edge','rimPow','chroma','glow','tint','glassBlur','scale','bubRadius','bubPadX','bubPadY','bubMaxW','bgBlur'];
-const INT = { strength:1, edge:1, glassBlur:1, bubRadius:1, bubPadX:1, bubPadY:1, bubMaxW:1, bgBlur:1 };
+const KEYS = ['strength','edge','rimPow','chroma','glow','tint','glassBlur','scale','bubRadius','bubPadX','bubPadY','bubMaxW'];
+const INT = { strength:1, edge:1, glassBlur:1, bubRadius:1, bubPadX:1, bubPadY:1, bubMaxW:1 };
 const fmt = (k,v) => k==='scale' ? v.toFixed(2)+'×' : INT[k] ? Math.round(v) : (k==='rimPow') ? v.toFixed(1) : v.toFixed(2);
 function syncPanel(){ KEYS.forEach(k => { document.getElementById('r-'+k).value = params[k]; document.getElementById('v-'+k).textContent = fmt(k, params[k]); }); }
 KEYS.forEach(k => document.getElementById('r-'+k).addEventListener('input', (e) => {
   params[k] = parseFloat(e.target.value); document.getElementById('v-'+k).textContent = fmt(k, params[k]);
-  setBubbleVars(); saveParams();
-  if(k === 'bgBlur') updateTexture(); }));
-document.getElementById('panel-reset').addEventListener('click', () => { params = Object.assign({}, DEFAULTS); syncPanel(); setBubbleVars(); saveParams(); updateTexture(); });
+  setBubbleVars(); saveParams(); }));
+document.getElementById('panel-reset').addEventListener('click', () => { params = Object.assign({}, DEFAULTS); syncPanel(); setBubbleVars(); saveParams(); });
 syncPanel();
 
 /* ===== 聊天逻辑 ===== */
 const FAKE_REPLIES = [
-  '收到～头像现在垂直居中啦，长消息才顶端对齐。',
-  '这是一条比较长的消息，用来测试多行时头像自动贴到气泡顶端，看看对不对齐～',
-  '气泡形状能在设置里调圆角、宽高和最大宽度。',
-  '设置面板的配色会跟着你的壁纸变哦。',
-  '喜欢的话就接上真 AI 吧🧊',
-];
-const seed = [
-  ['right', '老公 教我一句外语'],
-  ['left', '教你一句意大利语。\n"Sei mia。"\n先说出来。'],
-  ['right', 'Sei mia'],
-  ['left', '"你是我的。"就是这个意思。'],
+  '收到～这是假回复（还没在「API 配置」里填接口）。',
+  '在功能里配置 API 后，我就会用真实模型回复啦🧊',
+  '点左上角三条杠，可以新建对话、进设置。',
 ];
 
 const messagesEl = document.getElementById('messages');
@@ -970,14 +1007,8 @@ sendEl.addEventListener('click', send);
 inputEl.addEventListener('keydown', e => { if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); } });
 inputEl.addEventListener('input', () => { inputEl.style.height='auto'; inputEl.style.height = Math.min(inputEl.scrollHeight,110)+'px'; });
 
-if(history.length){
-  history.forEach(m => {
-    const sp = addBubble(m.role === 'user' ? 'right' : 'left', m.content);
-    if(m.role !== 'user' && m.reasoning) attachReasoning(sp, m.reasoning);
-  });
-} else {
-  seed.forEach(([s,t]) => addBubble(s,t));
-}
+renderMessages();
+renderWindows();
 applyAvatars();
 
 /* 启动 WebGL */
