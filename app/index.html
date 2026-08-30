@@ -543,7 +543,7 @@ function setAvatar(side, dataURL){
 }
 
 /* ===== 液态玻璃 WebGL ===== */
-const MAX = 28;
+const MAX = 48;
 const VERT = `attribute vec2 a; void main(){ gl_Position = vec4(a,0.0,1.0); }`;
 const FRAG = `
 precision highp float;
@@ -732,6 +732,7 @@ function frame(){
   els.forEach(el => {
     if(n >= MAX) return;
     const r = el.getBoundingClientRect(); if(r.width < 2 || r.height < 2) return;
+    if(r.bottom < pr.top - 4 || r.top > pr.bottom + 4) return; // 只画可视区内的玻璃，避免超出上限
     const cx = (r.left-pr.left + r.width/2)*dpr, cy = (r.top-pr.top + r.height/2)*dpr;
     const hw = r.width/2*dpr, hh = r.height/2*dpr;
     let rad = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 20;
