@@ -1,0 +1,652 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+<meta name="theme-color" content="#12181f" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="icons/icon-180.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="玻璃聊天" />
+<meta name="mobile-web-app-capable" content="yes" />
+</head>
+<body>
+<title>液态玻璃聊天</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Inter", system-ui, sans-serif;
+    background: #0b1016;
+    display: flex; align-items: center; justify-content: center; min-height: 100%;
+  }
+  :root {
+    --bub-radius: 23px; --bub-padx: 20px; --bub-pady: 11px; --bub-maxw: 72%;
+    --msg-font: 17px; --avatar-size: 34px;
+    --set-bg: rgba(22,28,36,0.86); --set-accent: #8fa2c9;
+  }
+
+  .phone {
+    position: relative; isolation: isolate;
+    width: 100%; max-width: 402px;
+    height: 100dvh; max-height: 874px;
+    overflow: hidden; color: #fff;
+    display: flex; flex-direction: column;
+    background: #12181f;
+  }
+  @media (min-width: 440px) {
+    .phone { border-radius: 44px; box-shadow: 0 30px 80px -20px rgba(0,0,0,0.8); }
+  }
+
+  #gl { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
+
+  /* ===== 顶栏 ===== */
+  .topbar {
+    position: relative; z-index: 2;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; padding: 18px 16px 12px;
+  }
+  .glass {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.16);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.20);
+  }
+  .glass-circle {
+    width: 46px; height: 46px; flex-shrink: 0; border-radius: 999px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; cursor: pointer; padding: 0;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  }
+  .glass-circle svg { width: 22px; height: 22px; }
+
+  .name-capsule {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 5px 18px 5px 5px; border-radius: 999px; max-width: 62%;
+  }
+  .cap-avatar {
+    width: 34px; height: 34px; flex-shrink: 0; border-radius: 999px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 600; color: #fff;
+    background: linear-gradient(135deg, #7c8ce0, #cf6bd6);
+    box-shadow: inset 0 1px 2px rgba(255,255,255,0.4); overflow: hidden;
+  }
+  .cap-avatar img, .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .cap-name { font-size: 16px; font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.3); white-space: nowrap; }
+  .topbar-spacer { width: 46px; flex-shrink: 0; }
+
+  /* ===== 消息 ===== */
+  .messages {
+    position: relative; z-index: 2;
+    flex: 1; overflow-y: auto;
+    padding: 8px 14px 6px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .messages::-webkit-scrollbar { width: 0; }
+
+  .row { display: flex; align-items: center; gap: 8px; animation: fadeUp 0.3s ease-out; }
+  .row.right { justify-content: flex-end; }
+  .row.multiline { align-items: flex-start; }
+
+  .avatar {
+    width: var(--avatar-size); height: var(--avatar-size); flex-shrink: 0; border-radius: 999px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: calc(var(--avatar-size) * 0.47); font-weight: 600; color: #fff;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.3), inset 0 1px 2px rgba(255,255,255,0.35);
+    overflow: hidden;
+  }
+  .avatar-ai   { background: linear-gradient(135deg, #7c8ce0, #cf6bd6); }
+  .avatar-user { background: linear-gradient(135deg, #56b6f4, #3b7bf0); }
+
+  .message {
+    position: relative;
+    display: inline-flex; align-items: center;
+    max-width: var(--bub-maxw); min-height: 44px;
+    padding: var(--bub-pady) var(--bub-padx);
+    border-radius: var(--bub-radius);
+    font-size: var(--msg-font); line-height: 1.45;
+  }
+  .message span {
+    position: relative; z-index: 2;
+    white-space: pre-wrap; word-break: break-word;
+    color: rgba(255,255,255,0.96);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.28);
+  }
+
+  .typing { display: flex; gap: 5px; }
+  .typing i {
+    width: 8px; height: 8px; border-radius: 999px; background: rgba(255,255,255,0.9);
+    animation: bounceDot 1.2s infinite ease-in-out;
+  }
+  .typing i:nth-child(2) { animation-delay: 0.2s; }
+  .typing i:nth-child(3) { animation-delay: 0.4s; }
+
+  /* ===== 输入栏 ===== */
+  .composer { position: relative; z-index: 2; padding: 10px 14px calc(12px + env(safe-area-inset-bottom)); }
+  .inputbar { display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 10px; border-radius: 999px; }
+  .icon-btn, .send {
+    flex-shrink: 0; border-radius: 999px; color: #fff; cursor: pointer; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent; border: 1px solid rgba(255,255,255,0.22);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  }
+  .icon-btn { width: 40px; height: 40px; font-size: 22px; }
+  .send { width: 46px; height: 46px; transition: transform 0.1s; }
+  .send:active { transform: scale(0.92); }
+  .send svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; }
+  textarea {
+    flex: 1; resize: none; border: none; outline: none; background: transparent;
+    color: #fff; font-family: inherit; font-size: 16px; line-height: 1.4;
+    padding: 8px 4px; max-height: 110px; text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  }
+  textarea::placeholder { color: rgba(255,255,255,0.6); }
+
+  /* ===== 功能抽屉 ===== */
+  .overlay { position: absolute; inset: 0; z-index: 10; display: flex; }
+  .overlay[hidden] { display: none; }
+  #menu-overlay {
+    justify-content: flex-start;
+    background: rgba(8,12,18,0.35);
+    backdrop-filter: blur(18px) saturate(120%); -webkit-backdrop-filter: blur(18px) saturate(120%);
+  }
+  .drawer {
+    width: 264px; height: 100%; padding: 26px 16px;
+    background: var(--set-bg);
+    border-right: 1px solid rgba(255,255,255,0.14);
+    box-shadow: 20px 0 60px -20px rgba(0,0,0,0.7);
+    animation: slideIn 0.25s cubic-bezier(0.2,0.8,0.2,1);
+    display: flex; flex-direction: column;
+  }
+  .drawer-title { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.5); margin: 6px 8px 14px; }
+  .menu-item {
+    display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border-radius: 16px;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+    color: #fff; font-size: 15px; cursor: pointer; text-align: left;
+  }
+  .menu-item:hover { background: rgba(255,255,255,0.12); }
+  .mi-icon { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; }
+  .mi-icon svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+
+  /* ===== 设置：底部弹出面板（上方露出真实聊天=实时预览）===== */
+  #settings-overlay { align-items: flex-end; background: transparent; }
+  .sheet {
+    width: 100%; max-height: 70%; overflow-y: auto;
+    padding: 10px 20px 22px; border-radius: 26px 26px 0 0;
+    background: var(--set-bg);
+    border-top: 1px solid rgba(255,255,255,0.18);
+    box-shadow: 0 -20px 60px -14px rgba(0,0,0,0.7);
+    animation: sheetUp 0.26s cubic-bezier(0.2,0.8,0.2,1);
+  }
+  .sheet::-webkit-scrollbar { width: 0; }
+  .grab { width: 40px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.3); margin: 2px auto 12px; }
+  .sheet-title { font-size: 18px; font-weight: 700; margin: 0 0 4px; }
+  .sheet-hint { font-size: 12px; color: rgba(255,255,255,0.5); margin: 0 0 16px; }
+  .sec { margin-bottom: 20px; }
+  .sec-head {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 13px; letter-spacing: 0.05em; color: rgba(255,255,255,0.55);
+    text-transform: uppercase; margin-bottom: 10px;
+  }
+  .btn-row { display: flex; gap: 10px; }
+  .btn {
+    color: #fff; cursor: pointer; font-size: 14px;
+    background: color-mix(in srgb, var(--set-accent) 32%, transparent);
+    border: 1px solid rgba(255,255,255,0.22); border-radius: 999px; padding: 9px 16px;
+  }
+  .btn.small { font-size: 12px; padding: 4px 12px; }
+  .btn.flex { flex: 1; text-align: center; }
+  .sheet label { display: block; font-size: 12px; color: rgba(255,255,255,0.82); margin-bottom: 12px; }
+  .sheet output { float: right; font-variant-numeric: tabular-nums; color: #fff; font-weight: 600; }
+  .sheet input[type=range] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 4px;
+    margin-top: 9px; border-radius: 999px; background: rgba(255,255,255,0.22); outline: none;
+  }
+  .sheet input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 18px; height: 18px; border-radius: 999px;
+    background: var(--set-accent); cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  }
+  .sheet input[type=range]::-moz-range-thumb {
+    width: 18px; height: 18px; border: none; border-radius: 999px; background: var(--set-accent); cursor: pointer;
+  }
+
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes slideIn { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+  @keyframes sheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  @keyframes bounceDot { 0%,80%,100% { transform: translateY(0); opacity: 0.4; } 40% { transform: translateY(-4px); opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .row, .typing i, .drawer, .sheet { animation: none; } }
+</style>
+
+<div class="phone" id="phone">
+  <canvas id="gl"></canvas>
+
+  <div class="topbar">
+    <button class="glass glass-circle" id="menu-btn" aria-label="菜单" data-side="left">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+    <div class="glass name-capsule" id="name-capsule" data-side="left">
+      <span class="cap-avatar" id="cap-avatar"></span>
+      <span class="cap-name" id="cap-name">言</span>
+    </div>
+    <span class="topbar-spacer"></span>
+  </div>
+
+  <div class="messages" id="messages"></div>
+
+  <div class="composer">
+    <div class="glass inputbar" data-side="left">
+      <button class="icon-btn" id="plus-btn" aria-label="更多">＋</button>
+      <textarea id="input" rows="1" placeholder="Type a message..."></textarea>
+      <button class="send" id="send" aria-label="发送">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- 功能抽屉 -->
+  <div class="overlay" id="menu-overlay" hidden>
+    <div class="drawer" id="drawer">
+      <div class="drawer-title">功能</div>
+      <button class="menu-item" id="open-settings">
+        <span class="mi-icon">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </span>
+        <span>设置</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 设置底部面板 -->
+  <div class="overlay" id="settings-overlay" hidden>
+    <div class="sheet" id="settings-sheet">
+      <div class="grab"></div>
+      <div class="sheet-title">设置</div>
+      <p class="sheet-hint">上方即实时预览，拖动滑块立即生效</p>
+
+      <div class="sec">
+        <div class="sec-head"><span>头像</span></div>
+        <div class="btn-row">
+          <button class="btn flex" id="ai-avatar-btn">AI 头像</button>
+          <button class="btn flex" id="user-avatar-btn">我的头像</button>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="sec-head"><span>壁纸</span></div>
+        <button class="btn flex" id="wallpaper-btn" style="width:100%">更换壁纸</button>
+      </div>
+
+      <div class="sec">
+        <div class="sec-head"><span>整体大小</span></div>
+        <label>字号 + 头像 <output id="v-scale"></output><input type="range" id="r-scale" min="0.8" max="1.6" step="0.05"></label>
+      </div>
+
+      <div class="sec">
+        <div class="sec-head"><span>气泡形状</span></div>
+        <label>圆角 <output id="v-bubRadius"></output><input type="range" id="r-bubRadius" min="8" max="40" step="1"></label>
+        <label>左右宽度 <output id="v-bubPadX"></output><input type="range" id="r-bubPadX" min="2" max="90" step="1"></label>
+        <label>上下高度 <output id="v-bubPadY"></output><input type="range" id="r-bubPadY" min="2" max="70" step="1"></label>
+        <label>最大宽度 <output id="v-bubMaxW"></output><input type="range" id="r-bubMaxW" min="40" max="96" step="1"></label>
+      </div>
+
+      <div class="sec">
+        <div class="sec-head"><span>玻璃调节</span><button class="btn small" id="panel-reset">重置</button></div>
+        <label>折射强度 <output id="v-strength"></output><input type="range" id="r-strength" min="0" max="120" step="1"></label>
+        <label>折射宽度 <output id="v-edge"></output><input type="range" id="r-edge" min="2" max="48" step="1"></label>
+        <label>边缘锐度 <output id="v-rimPow"></output><input type="range" id="r-rimPow" min="1" max="5" step="0.1"></label>
+        <label>色散彩边 <output id="v-chroma"></output><input type="range" id="r-chroma" min="0" max="0.8" step="0.01"></label>
+        <label>边缘反光 <output id="v-glow"></output><input type="range" id="r-glow" min="0" max="0.6" step="0.01"></label>
+        <label>玻璃染色 <output id="v-tint"></output><input type="range" id="r-tint" min="0" max="0.3" step="0.01"></label>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="wallpaper-input" accept="image/*" style="display:none" />
+  <input type="file" id="ai-avatar-input" accept="image/*" style="display:none" />
+  <input type="file" id="user-avatar-input" accept="image/*" style="display:none" />
+</div>
+
+<script>
+/* ===== 昵称 / 头像 ===== */
+const NICKNAME = '言';
+const AI_TEXT = NICKNAME.slice(0, 1);
+const USER_TEXT = '🧑';
+let aiAvatarSrc = null, userAvatarSrc = null;
+try { aiAvatarSrc = localStorage.getItem('lg-ai-avatar') || null; userAvatarSrc = localStorage.getItem('lg-user-avatar') || null; } catch(e){}
+
+document.getElementById('cap-name').textContent = NICKNAME;
+function avatarHTML(side){
+  const src = side === 'right' ? userAvatarSrc : aiAvatarSrc;
+  if(src) return '<img src="' + src + '" alt="">';
+  return side === 'right' ? USER_TEXT : AI_TEXT;
+}
+function applyAvatars(){
+  const cap = document.getElementById('cap-avatar');
+  cap.innerHTML = avatarHTML('left');
+  document.querySelectorAll('.avatar-ai').forEach(a => a.innerHTML = avatarHTML('left'));
+  document.querySelectorAll('.avatar-user').forEach(a => a.innerHTML = avatarHTML('right'));
+}
+function setAvatar(side, dataURL){
+  if(side === 'right'){ userAvatarSrc = dataURL; try { localStorage.setItem('lg-user-avatar', dataURL); } catch(e){} }
+  else { aiAvatarSrc = dataURL; try { localStorage.setItem('lg-ai-avatar', dataURL); } catch(e){} }
+  applyAvatars();
+}
+
+/* ===== 液态玻璃 WebGL ===== */
+const MAX = 28;
+const VERT = `attribute vec2 a; void main(){ gl_Position = vec4(a,0.0,1.0); }`;
+const FRAG = `
+precision highp float;
+uniform vec2 uRes; uniform sampler2D uTex; uniform int uCount;
+uniform vec4 uRect[${MAX}]; uniform vec2 uMeta[${MAX}];
+uniform vec2 uLight;
+uniform float uStrength, uEdge, uChroma, uGlow, uRimPow, uTint;
+float sdRound(vec2 p, vec2 c, vec2 hw, float r){
+  vec2 q = abs(p-c) - hw + r;
+  return min(max(q.x,q.y),0.0) + length(max(q,0.0)) - r;
+}
+float scene(vec2 p, out float side){
+  float d = 1e9; side = 0.0;
+  for(int i=0;i<${MAX};i++){ if(i>=uCount) break;
+    vec4 R = uRect[i];
+    float di = sdRound(p, R.xy, R.zw, uMeta[i].x);
+    if(di < d){ d = di; side = uMeta[i].y; } }
+  return d;
+}
+float sceneD(vec2 p){ float s; return scene(p,s); }
+vec3 bg(vec2 p){ return texture2D(uTex, vec2(p.x/uRes.x, p.y/uRes.y)).rgb; }
+void main(){
+  vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
+  float side; float d = scene(p, side);
+  vec3 col = bg(p);
+  float alpha = smoothstep(1.0, -1.0, d);
+  if(alpha > 0.001){
+    float e = 1.5;
+    vec2 g = normalize(vec2(sceneD(p+vec2(e,0.))-sceneD(p-vec2(e,0.)),
+                            sceneD(p+vec2(0.,e))-sceneD(p-vec2(0.,e))) + 1e-6);
+    float rim = 1.0 - smoothstep(0.0, uEdge, -d);
+    rim = pow(rim, uRimPow);
+    vec2 off = g * uStrength * rim;
+    vec3 refr;
+    refr.r = bg(p + off*(1.0+uChroma)).r;
+    refr.g = bg(p + off).g;
+    refr.b = bg(p + off*(1.0-uChroma)).b;
+    vec3 tint = mix(vec3(0.16,0.19,0.24), vec3(0.85,0.90,0.98), side);
+    float tintA = uTint * mix(1.1, 0.9, side);
+    vec3 glass = mix(refr, tint, tintA);
+    glass += vec3(uGlow) * pow(rim, 2.5);
+    float spec = pow(max(dot(normalize(-g), normalize(uLight)),0.0), 24.0) * rim;
+    glass += vec3(1.0) * spec * 0.5;
+    col = mix(col, glass, alpha);
+  }
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+const phone = document.getElementById('phone');
+const canvas = document.getElementById('gl');
+let gl, prog, loc = {}, tex, dpr = Math.min(devicePixelRatio || 1, 2);
+let light = [0.0, -1.0];
+
+const DEFAULTS = { strength:48, edge:12, rimPow:2.4, chroma:0.32, glow:0.20, tint:0.06,
+                   scale:1, bubRadius:23, bubPadX:20, bubPadY:11, bubMaxW:72 };
+let params = Object.assign({}, DEFAULTS);
+try { const s = JSON.parse(localStorage.getItem('lg-params') || 'null'); if(s) params = Object.assign({}, DEFAULTS, s); } catch(e){}
+const saveParams = () => { try { localStorage.setItem('lg-params', JSON.stringify(params)); } catch(e){} };
+
+function setBubbleVars(){
+  const r = document.documentElement.style;
+  r.setProperty('--bub-radius', params.bubRadius + 'px');
+  r.setProperty('--bub-padx', params.bubPadX + 'px');
+  r.setProperty('--bub-pady', params.bubPadY + 'px');
+  r.setProperty('--bub-maxw', params.bubMaxW + '%');
+  r.setProperty('--msg-font', (17 * params.scale).toFixed(1) + 'px');
+  r.setProperty('--avatar-size', (34 * params.scale).toFixed(1) + 'px');
+}
+setBubbleVars();
+
+function compile(t, src){ const s = gl.createShader(t); gl.shaderSource(s, src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+
+function initGL(){
+  gl = canvas.getContext('webgl', { premultipliedAlpha:false, antialias:true });
+  if(!gl) return false;
+  prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+  gl.linkProgram(prog);
+  if(!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+  const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
+  const a = gl.getAttribLocation(prog, 'a'); gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a,2,gl.FLOAT,false,0,0);
+  ['uRes','uTex','uCount','uLight','uStrength','uEdge','uChroma','uGlow','uRimPow','uTint']
+    .forEach(n => loc[n] = gl.getUniformLocation(prog, n));
+  loc.uRect = gl.getUniformLocation(prog, 'uRect[0]');
+  loc.uMeta = gl.getUniformLocation(prog, 'uMeta[0]');
+  tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  return true;
+}
+
+let userImg = null;
+function drawCover(x, img, w, h){
+  const ir = img.width/img.height, cr = w/h; let dw, dh;
+  if(ir > cr){ dh = h; dw = h*ir; } else { dw = w; dh = w/ir; }
+  x.drawImage(img, (w-dw)/2, (h-dh)/2, dw, dh);
+}
+function buildBackground(w, h){
+  const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d');
+  if(userImg){ drawCover(x, userImg, w, h); return c; }
+  const grad = x.createLinearGradient(0,0,0,h);
+  grad.addColorStop(0,'#4a5a68'); grad.addColorStop(0.42,'#202932'); grad.addColorStop(1,'#0c1116');
+  x.fillStyle = grad; x.fillRect(0,0,w,h);
+  [[0.20,0.08,0.9,'#8aa0b4'],[0.85,0.18,0.7,'#6f8698'],[0.40,0.55,0.5,'#cfd8e0'],
+   [0.78,0.72,0.45,'#b6c2cc'],[0.12,0.80,0.42,'#9fb0bd'],[0.55,0.30,0.35,'#dfe7ee']]
+  .forEach(([bx,by,rr,cl])=>{ const r = rr*Math.max(w,h)*0.5;
+    const rg = x.createRadialGradient(bx*w,by*h,0,bx*w,by*h,r);
+    rg.addColorStop(0,cl); rg.addColorStop(1,'rgba(0,0,0,0)'); x.fillStyle = rg; x.fillRect(0,0,w,h); });
+  x.fillStyle = 'rgba(120,132,148,0.10)'; x.fillRect(0,0,w,h);
+  return c;
+}
+// 设置面板配色跟随聊天背景（取背景平均色）
+function computeTheme(){
+  const s = document.createElement('canvas'); s.width = s.height = 24; const sx = s.getContext('2d');
+  sx.drawImage(buildBackground(24, 24), 0, 0);
+  const d = sx.getImageData(0,0,24,24).data; let r=0,g=0,b=0,c=0;
+  for(let i=0;i<d.length;i+=4){ r+=d[i]; g+=d[i+1]; b+=d[i+2]; c++; }
+  r/=c; g/=c; b/=c;
+  const dk = v => Math.round(v*0.34 + 12);
+  const ac = v => Math.min(255, Math.round(v*1.1 + 55));
+  const rs = document.documentElement.style;
+  rs.setProperty('--set-bg', `rgba(${dk(r)},${dk(g)},${dk(b)},0.88)`);
+  rs.setProperty('--set-accent', `rgb(${ac(r)},${ac(g)},${ac(b)})`);
+}
+function updateTexture(){ if(!gl) return;
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, buildBackground(canvas.width, canvas.height));
+  computeTheme();
+}
+function setWallpaper(dataURL, remember){
+  const img = new Image();
+  img.onload = () => { userImg = img; updateTexture();
+    if(remember){ try { localStorage.setItem('lg-wallpaper', dataURL); } catch(e){} }
+    if(!gl){ phone.style.background = 'center/cover no-repeat url(' + dataURL + ')'; } };
+  img.src = dataURL;
+}
+
+function resize(){
+  const w = Math.round(phone.clientWidth*dpr), h = Math.round(phone.clientHeight*dpr);
+  if(canvas.width === w && canvas.height === h) return;
+  canvas.width = w; canvas.height = h; gl.viewport(0,0,w,h);
+  gl.uniform2f(loc.uRes, w, h);
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, buildBackground(w, h));
+  computeTheme();
+}
+function frame(){
+  resize();
+  const pr = phone.getBoundingClientRect();
+  const els = phone.querySelectorAll('.glass');
+  const rects = new Float32Array(MAX*4), metas = new Float32Array(MAX*2); let n = 0;
+  els.forEach(el => {
+    if(n >= MAX) return;
+    const r = el.getBoundingClientRect(); if(r.width < 2 || r.height < 2) return;
+    const cx = (r.left-pr.left + r.width/2)*dpr, cy = (r.top-pr.top + r.height/2)*dpr;
+    const hw = r.width/2*dpr, hh = r.height/2*dpr;
+    let rad = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 20;
+    rad = Math.min(rad*dpr, hw, hh);
+    rects[n*4]=cx; rects[n*4+1]=cy; rects[n*4+2]=hw; rects[n*4+3]=hh;
+    metas[n*2]=rad; metas[n*2+1] = el.dataset.side === 'right' ? 1.0 : 0.0; n++;
+  });
+  gl.uniform1i(loc.uCount, n);
+  gl.uniform4fv(loc.uRect, rects); gl.uniform2fv(loc.uMeta, metas);
+  gl.uniform2f(loc.uLight, light[0], light[1]);
+  gl.uniform1f(loc.uStrength, params.strength*dpr);
+  gl.uniform1f(loc.uEdge, params.edge*dpr);
+  gl.uniform1f(loc.uChroma, params.chroma);
+  gl.uniform1f(loc.uGlow, params.glow);
+  gl.uniform1f(loc.uRimPow, params.rimPow);
+  gl.uniform1f(loc.uTint, params.tint);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(loc.uTex, 0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  requestAnimationFrame(frame);
+}
+
+phone.addEventListener('pointermove', (e) => {
+  const pr = phone.getBoundingClientRect();
+  const nx = (e.clientX-pr.left)/pr.width - 0.5, ny = (e.clientY-pr.top)/pr.height - 0.5;
+  const len = Math.hypot(nx,ny) || 1; light = [nx/len, ny/len];
+});
+
+/* ===== 抽屉 / 设置 ===== */
+const menuOverlay = document.getElementById('menu-overlay');
+const settingsOverlay = document.getElementById('settings-overlay');
+document.getElementById('menu-btn').addEventListener('click', () => { menuOverlay.hidden = false; });
+document.getElementById('open-settings').addEventListener('click', () => { menuOverlay.hidden = true; settingsOverlay.hidden = false; });
+menuOverlay.addEventListener('click', (e) => { if(e.target === menuOverlay) menuOverlay.hidden = true; });
+settingsOverlay.addEventListener('click', (e) => { if(e.target === settingsOverlay) settingsOverlay.hidden = true; });
+
+/* ===== 图片上传（壁纸 / 头像）===== */
+function bindPicker(btnId, inputId, onData){
+  const input = document.getElementById(inputId);
+  document.getElementById(btnId).addEventListener('click', () => input.click());
+  input.addEventListener('change', () => {
+    const f = input.files && input.files[0]; if(!f) return;
+    const rd = new FileReader(); rd.onload = () => onData(rd.result); rd.readAsDataURL(f); input.value = '';
+  });
+}
+bindPicker('wallpaper-btn', 'wallpaper-input', d => setWallpaper(d, true));
+bindPicker('ai-avatar-btn', 'ai-avatar-input', d => setAvatar('left', d));
+bindPicker('user-avatar-btn', 'user-avatar-input', d => setAvatar('right', d));
+phone.addEventListener('dragover', (e) => e.preventDefault());
+phone.addEventListener('drop', (e) => { e.preventDefault();
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if(f && f.type.startsWith('image/')){ const rd = new FileReader(); rd.onload = () => setWallpaper(rd.result, true); rd.readAsDataURL(f); } });
+try { const saved = localStorage.getItem('lg-wallpaper'); if(saved) setWallpaper(saved, false); } catch(e){}
+
+/* ===== 滑块 ===== */
+const KEYS = ['strength','edge','rimPow','chroma','glow','tint','scale','bubRadius','bubPadX','bubPadY','bubMaxW'];
+const INT = { strength:1, edge:1, bubRadius:1, bubPadX:1, bubPadY:1, bubMaxW:1 };
+const fmt = (k,v) => k==='scale' ? v.toFixed(2)+'×' : INT[k] ? Math.round(v) : (k==='rimPow') ? v.toFixed(1) : v.toFixed(2);
+function syncPanel(){ KEYS.forEach(k => { document.getElementById('r-'+k).value = params[k]; document.getElementById('v-'+k).textContent = fmt(k, params[k]); }); }
+KEYS.forEach(k => document.getElementById('r-'+k).addEventListener('input', (e) => {
+  params[k] = parseFloat(e.target.value); document.getElementById('v-'+k).textContent = fmt(k, params[k]);
+  setBubbleVars(); saveParams(); }));
+document.getElementById('panel-reset').addEventListener('click', () => { params = Object.assign({}, DEFAULTS); syncPanel(); setBubbleVars(); saveParams(); });
+syncPanel();
+
+/* ===== 聊天逻辑 ===== */
+const FAKE_REPLIES = [
+  '收到～头像现在垂直居中啦，长消息才顶端对齐。',
+  '这是一条比较长的消息，用来测试多行时头像自动贴到气泡顶端，看看对不对齐～',
+  '气泡形状能在设置里调圆角、宽高和最大宽度。',
+  '设置面板的配色会跟着你的壁纸变哦。',
+  '喜欢的话就接上真 AI 吧🧊',
+];
+const seed = [
+  ['right', '老公 教我一句外语'],
+  ['left', '教你一句意大利语。\n"Sei mia。"\n先说出来。'],
+  ['right', 'Sei mia'],
+  ['left', '"你是我的。"就是这个意思。'],
+];
+
+const messagesEl = document.getElementById('messages');
+const inputEl = document.getElementById('input');
+const sendEl = document.getElementById('send');
+let typing = false;
+const scrollDown = () => messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior: 'smooth' });
+
+function makeAvatar(side){
+  const a = document.createElement('span');
+  a.className = 'avatar ' + (side === 'right' ? 'avatar-user' : 'avatar-ai');
+  a.innerHTML = avatarHTML(side);
+  return a;
+}
+function makeBubble(side, inner){
+  const msg = document.createElement('div');
+  msg.className = 'message glass ' + side; msg.dataset.side = side;
+  msg.append(inner); return msg;
+}
+// 单行居中，多行顶端对齐
+function alignRow(row, span){
+  const lh = parseFloat(getComputedStyle(span).lineHeight) || 24;
+  const lines = span.offsetHeight / lh;
+  row.classList.toggle('multiline', lines > 1.35);
+}
+function addBubble(side, text){
+  const row = document.createElement('div'); row.className = 'row ' + side;
+  const span = document.createElement('span'); span.textContent = text;
+  const bubble = makeBubble(side, span);
+  if(side === 'right') { row.append(bubble, makeAvatar('right')); }
+  else { row.append(makeAvatar('left'), bubble); }
+  messagesEl.append(row);
+  requestAnimationFrame(() => alignRow(row, span));
+  scrollDown();
+}
+function showTyping(){
+  const row = document.createElement('div'); row.className = 'row left'; row.id = 'typing-row';
+  const dots = document.createElement('span'); dots.className = 'typing'; dots.innerHTML = '<i></i><i></i><i></i>';
+  row.append(makeAvatar('left'), makeBubble('left', dots));
+  messagesEl.append(row); scrollDown();
+}
+const hideTyping = () => document.getElementById('typing-row')?.remove();
+
+async function send(){
+  const text = inputEl.value.trim(); if(!text || typing) return;
+  addBubble('right', text); inputEl.value = ''; inputEl.style.height = 'auto';
+  typing = true; showTyping();
+  const reply = FAKE_REPLIES[Math.floor(Math.random()*FAKE_REPLIES.length)];
+  await new Promise(r => setTimeout(r, 800 + Math.random()*800));
+  hideTyping(); addBubble('left', reply); typing = false; inputEl.focus();
+}
+sendEl.addEventListener('click', send);
+inputEl.addEventListener('keydown', e => { if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); } });
+inputEl.addEventListener('input', () => { inputEl.style.height='auto'; inputEl.style.height = Math.min(inputEl.scrollHeight,110)+'px'; });
+
+seed.forEach(([s,t]) => addBubble(s,t));
+applyAvatars();
+
+/* 启动 WebGL */
+try {
+  if(initGL()){ requestAnimationFrame(frame); } else throw new Error('no webgl');
+} catch(err){
+  console.warn('WebGL 不可用，退回磨砂：', err);
+  canvas.style.display = 'none';
+  phone.style.background = 'linear-gradient(180deg,#4a5a68,#202932 45%,#0c1116)';
+  document.querySelectorAll('.glass').forEach(el => {
+    el.style.background = 'rgba(60,70,82,0.35)';
+    el.style.backdropFilter = 'blur(16px) saturate(140%)';
+    el.style.webkitBackdropFilter = 'blur(16px) saturate(140%)';
+  });
+}
+</script>
+
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  }
+</script>
+</body>
+</html>
