@@ -14,49 +14,77 @@
     height: 100dvh; max-height: 874px;
     overflow: hidden; color: #fff;
     display: flex; flex-direction: column;
-    background: #12181f; /* WebGL 失败时的底色 */
+    background: #12181f;
   }
   @media (min-width: 440px) {
     .phone { border-radius: 44px; box-shadow: 0 30px 80px -20px rgba(0,0,0,0.8); }
   }
 
-  /* WebGL 画布：背景 + 玻璃折射都画在这里，垫在所有 DOM 之下 */
   #gl { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
 
+  /* ===== 顶栏 ===== */
   .topbar {
     position: relative; z-index: 2;
     display: flex; align-items: center; justify-content: space-between;
-    padding: 18px 18px 12px;
+    gap: 8px; padding: 18px 16px 12px;
   }
-  /* 玻璃元素：背景透明（由 shader 画），只留文字 + 轻描边 + 投影 */
   .glass {
     background: transparent;
     border: 1px solid rgba(255,255,255,0.16);
     box-shadow: 0 6px 20px rgba(0,0,0,0.20);
   }
   .glass-circle {
-    width: 46px; height: 46px; border-radius: 999px;
+    width: 46px; height: 46px; flex-shrink: 0; border-radius: 999px;
     display: flex; align-items: center; justify-content: center;
-    color: #fff; font-size: 22px; cursor: pointer;
+    color: #fff; cursor: pointer; padding: 0;
     text-shadow: 0 1px 2px rgba(0,0,0,0.3);
   }
-  .glass-circle.title { font-weight: 600; font-size: 20px; }
+  .glass-circle svg { width: 22px; height: 22px; }
 
+  /* 名称胶囊：左头像 + 右昵称，宽度自适应 */
+  .name-capsule {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 5px 18px 5px 5px; border-radius: 999px;
+    max-width: 62%;
+  }
+  .cap-avatar {
+    width: 34px; height: 34px; flex-shrink: 0; border-radius: 999px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 600; color: #fff;
+    background: linear-gradient(135deg, #7c8ce0, #cf6bd6);
+    box-shadow: inset 0 1px 2px rgba(255,255,255,0.4);
+    overflow: hidden;
+  }
+  .cap-avatar img, .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .cap-name { font-size: 16px; font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.3); white-space: nowrap; }
+  .topbar-spacer { width: 46px; flex-shrink: 0; }
+
+  /* ===== 消息 ===== */
   .messages {
     position: relative; z-index: 2;
     flex: 1; overflow-y: auto;
-    padding: 8px 16px 6px;
-    display: flex; flex-direction: column; gap: 12px;
+    padding: 8px 14px 6px;
+    display: flex; flex-direction: column; gap: 14px;
   }
   .messages::-webkit-scrollbar { width: 0; }
 
-  .row { display: flex; animation: fadeUp 0.3s ease-out; }
+  .row { display: flex; align-items: flex-end; gap: 8px; animation: fadeUp 0.3s ease-out; }
   .row.right { justify-content: flex-end; }
+
+  .avatar {
+    width: 34px; height: 34px; flex-shrink: 0; border-radius: 999px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 600; color: #fff;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.3), inset 0 1px 2px rgba(255,255,255,0.35);
+    overflow: hidden;
+  }
+  .avatar-ai   { background: linear-gradient(135deg, #7c8ce0, #cf6bd6); }
+  .avatar-user { background: linear-gradient(135deg, #56b6f4, #3b7bf0); }
 
   .message {
     position: relative;
     display: inline-flex; align-items: center;
-    max-width: 78%; min-height: 46px;
+    max-width: 72%; min-height: 46px;
     padding: 11px 20px;
     border-radius: 26px;
     font-size: 17px; line-height: 1.45;
@@ -78,6 +106,7 @@
   .typing i:nth-child(2) { animation-delay: 0.2s; }
   .typing i:nth-child(3) { animation-delay: 0.4s; }
 
+  /* ===== 输入栏 ===== */
   .composer {
     position: relative; z-index: 2;
     padding: 10px 14px calc(12px + env(safe-area-inset-bottom));
@@ -103,204 +132,216 @@
   }
   textarea::placeholder { color: rgba(255,255,255,0.6); }
 
-  /* 调节面板 */
-  #panel {
-    position: absolute; z-index: 5; top: 74px; right: 14px; width: 244px;
-    padding: 14px 16px 16px; border-radius: 20px;
-    background: rgba(24,30,38,0.82);
-    border: 1px solid rgba(255,255,255,0.18);
-    backdrop-filter: blur(24px) saturate(150%); -webkit-backdrop-filter: blur(24px) saturate(150%);
-    box-shadow: 0 20px 50px -12px rgba(0,0,0,0.7);
-    animation: fadeUp 0.2s ease-out;
+  /* ===== 覆盖层（抽屉 / 设置）===== */
+  .overlay {
+    position: absolute; inset: 0; z-index: 10;
+    background: rgba(8,12,18,0.35);
+    backdrop-filter: blur(18px) saturate(120%); -webkit-backdrop-filter: blur(18px) saturate(120%);
+    display: flex;
   }
-  #panel[hidden] { display: none; }
-  .panel-head {
+  .overlay[hidden] { display: none; }
+
+  /* 功能抽屉：左侧滑入 */
+  #menu-overlay { justify-content: flex-start; }
+  .drawer {
+    width: 264px; height: 100%; padding: 26px 16px;
+    background: rgba(22,28,36,0.7);
+    border-right: 1px solid rgba(255,255,255,0.14);
+    box-shadow: 20px 0 60px -20px rgba(0,0,0,0.7);
+    animation: slideIn 0.25s cubic-bezier(0.2,0.8,0.2,1);
+    display: flex; flex-direction: column;
+  }
+  .drawer-title { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.5); margin: 6px 8px 14px; }
+  .menu-item {
+    display: flex; align-items: center; gap: 12px;
+    width: 100%; padding: 12px 14px; border-radius: 16px;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+    color: #fff; font-size: 15px; cursor: pointer; text-align: left;
+  }
+  .menu-item:hover { background: rgba(255,255,255,0.12); }
+  .mi-icon { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; }
+  .mi-icon svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+
+  /* 设置页：居中卡片 */
+  #settings-overlay { align-items: center; justify-content: center; padding: 24px; }
+  .sheet {
+    width: 100%; max-width: 320px; max-height: 82%; overflow-y: auto;
+    padding: 20px 20px 22px; border-radius: 24px;
+    background: rgba(22,28,36,0.78);
+    border: 1px solid rgba(255,255,255,0.16);
+    box-shadow: 0 24px 60px -14px rgba(0,0,0,0.75);
+    animation: fadeUp 0.22s ease-out;
+  }
+  .sheet::-webkit-scrollbar { width: 0; }
+  .sheet-title { font-size: 18px; font-weight: 700; margin: 0 0 16px; }
+  .sec { margin-bottom: 20px; }
+  .sec-head {
     display: flex; align-items: center; justify-content: space-between;
-    font-size: 14px; font-weight: 600; margin-bottom: 12px;
+    font-size: 13px; letter-spacing: 0.05em; color: rgba(255,255,255,0.55);
+    text-transform: uppercase; margin-bottom: 10px;
   }
-  #panel-reset {
-    font-size: 12px; color: #fff; cursor: pointer;
+  .btn {
+    color: #fff; cursor: pointer; font-size: 14px;
     background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.2);
-    border-radius: 999px; padding: 3px 12px;
+    border-radius: 999px; padding: 9px 16px;
   }
-  #panel label {
-    display: block; font-size: 12px; color: rgba(255,255,255,0.8);
-    margin-bottom: 10px;
-  }
-  #panel output {
-    float: right; font-variant-numeric: tabular-nums; color: #fff;
-    font-weight: 600;
-  }
-  #panel input[type=range] {
+  .btn.small { font-size: 12px; padding: 4px 12px; }
+  .btn.block { width: 100%; text-align: center; }
+  .sheet label { display: block; font-size: 12px; color: rgba(255,255,255,0.8); margin-bottom: 12px; }
+  .sheet output { float: right; font-variant-numeric: tabular-nums; color: #fff; font-weight: 600; }
+  .sheet input[type=range] {
     -webkit-appearance: none; appearance: none; width: 100%; height: 4px;
-    margin-top: 8px; border-radius: 999px; background: rgba(255,255,255,0.22); outline: none;
+    margin-top: 9px; border-radius: 999px; background: rgba(255,255,255,0.22); outline: none;
   }
-  #panel input[type=range]::-webkit-slider-thumb {
+  .sheet input[type=range]::-webkit-slider-thumb {
     -webkit-appearance: none; width: 18px; height: 18px; border-radius: 999px;
     background: #fff; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.4);
   }
-  #panel input[type=range]::-moz-range-thumb {
+  .sheet input[type=range]::-moz-range-thumb {
     width: 18px; height: 18px; border: none; border-radius: 999px; background: #fff; cursor: pointer;
   }
 
   @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes slideIn { from { transform: translateX(-100%); } to { transform: translateX(0); } }
   @keyframes bounceDot { 0%,80%,100% { transform: translateY(0); opacity: 0.4; } 40% { transform: translateY(-4px); opacity: 1; } }
-  @media (prefers-reduced-motion: reduce) { .row, .typing i, #panel { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .row, .typing i, .drawer, .sheet { animation: none; } }
 </style>
 
 <div class="phone" id="phone">
   <canvas id="gl"></canvas>
 
+  <!-- 顶栏 -->
   <div class="topbar">
-    <div class="glass glass-circle" data-side="left">‹</div>
-    <div class="glass glass-circle title" data-side="left">言</div>
-    <div style="display:flex; gap:10px;">
-      <div class="glass glass-circle" id="wallpaper-btn" data-side="left" title="换壁纸">🖼️</div>
-      <div class="glass glass-circle" id="tune-btn" data-side="left" title="调节玻璃">⚙️</div>
+    <button class="glass glass-circle" id="menu-btn" aria-label="菜单" data-side="left">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+    <div class="glass name-capsule" id="name-capsule" data-side="left">
+      <span class="cap-avatar" id="cap-avatar"></span>
+      <span class="cap-name" id="cap-name">言</span>
     </div>
-  </div>
-  <input type="file" id="wallpaper-input" accept="image/*" style="display:none" />
-
-  <!-- 调节面板 -->
-  <div id="panel" hidden>
-    <div class="panel-head">
-      <span>玻璃调节</span>
-      <button id="panel-reset" type="button">重置</button>
-    </div>
-    <label>折射强度 <output id="v-strength"></output>
-      <input type="range" id="r-strength" min="0" max="120" step="1"></label>
-    <label>折射宽度 <output id="v-edge"></output>
-      <input type="range" id="r-edge" min="2" max="48" step="1"></label>
-    <label>边缘锐度 <output id="v-rimPow"></output>
-      <input type="range" id="r-rimPow" min="1" max="5" step="0.1"></label>
-    <label>色散彩边 <output id="v-chroma"></output>
-      <input type="range" id="r-chroma" min="0" max="0.8" step="0.01"></label>
-    <label>边缘反光 <output id="v-glow"></output>
-      <input type="range" id="r-glow" min="0" max="0.6" step="0.01"></label>
-    <label>玻璃染色 <output id="v-tint"></output>
-      <input type="range" id="r-tint" min="0" max="0.3" step="0.01"></label>
+    <span class="topbar-spacer"></span>
   </div>
 
   <div class="messages" id="messages"></div>
 
   <div class="composer">
     <div class="glass inputbar" data-side="left">
-      <button class="icon-btn" aria-label="更多">＋</button>
-      <button class="icon-btn" aria-label="头像" style="font-size:18px;">思</button>
+      <button class="icon-btn" id="plus-btn" aria-label="更多">＋</button>
       <textarea id="input" rows="1" placeholder="Type a message..."></textarea>
       <button class="send" id="send" aria-label="发送">
         <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
       </button>
     </div>
   </div>
+
+  <!-- 功能抽屉 -->
+  <div class="overlay" id="menu-overlay" hidden>
+    <div class="drawer" id="drawer">
+      <div class="drawer-title">功能</div>
+      <button class="menu-item" id="open-settings">
+        <span class="mi-icon">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </span>
+        <span>设置</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 设置页 -->
+  <div class="overlay" id="settings-overlay" hidden>
+    <div class="sheet" id="settings-sheet">
+      <div class="sheet-title">设置</div>
+
+      <div class="sec">
+        <div class="sec-head"><span>壁纸</span></div>
+        <button class="btn block" id="wallpaper-btn">更换壁纸</button>
+      </div>
+
+      <div class="sec">
+        <div class="sec-head"><span>玻璃调节</span><button class="btn small" id="panel-reset">重置</button></div>
+        <label>折射强度 <output id="v-strength"></output><input type="range" id="r-strength" min="0" max="120" step="1"></label>
+        <label>折射宽度 <output id="v-edge"></output><input type="range" id="r-edge" min="2" max="48" step="1"></label>
+        <label>边缘锐度 <output id="v-rimPow"></output><input type="range" id="r-rimPow" min="1" max="5" step="0.1"></label>
+        <label>色散彩边 <output id="v-chroma"></output><input type="range" id="r-chroma" min="0" max="0.8" step="0.01"></label>
+        <label>边缘反光 <output id="v-glow"></output><input type="range" id="r-glow" min="0" max="0.6" step="0.01"></label>
+        <label>玻璃染色 <output id="v-tint"></output><input type="range" id="r-tint" min="0" max="0.3" step="0.01"></label>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="wallpaper-input" accept="image/*" style="display:none" />
 </div>
 
 <script>
-/* =========================================================
-   液态玻璃：WebGL 着色器实现
-   - SDF 圆角矩形定义每个玻璃元素
-   - 由 SDF 梯度求法线，折射采样背景（真折射，非磨砂）
-   - 三通道色散 + Fresnel 边缘光 + 高光
-   ========================================================= */
-const MAX = 24;
+/* ===== 昵称 / 头像（AI 头像 = 胶囊头像，两处同步）===== */
+const NICKNAME = '言';
+const AI_AVATAR = NICKNAME.slice(0, 1); // 也可换成 emoji 或图片
+const USER_AVATAR = '🧑';
+document.getElementById('cap-name').textContent = NICKNAME;
+document.getElementById('cap-avatar').textContent = AI_AVATAR;
 
-const VERT = `
-attribute vec2 a; void main(){ gl_Position = vec4(a, 0.0, 1.0); }
-`;
-
+/* ========================================================= 液态玻璃 WebGL ========================================================= */
+const MAX = 28;
+const VERT = `attribute vec2 a; void main(){ gl_Position = vec4(a,0.0,1.0); }`;
 const FRAG = `
 precision highp float;
-uniform vec2  uRes;
-uniform sampler2D uTex;
-uniform int   uCount;
-uniform vec4  uRect[${MAX}];   // cx, cy, halfw, halfh  (顶部原点, 像素)
-uniform vec2  uMeta[${MAX}];   // radius, side(0=左/暗,1=右/亮)
-uniform vec2  uLight;          // 光照方向
-uniform float uStrength;       // 折射强度(px)
-uniform float uEdge;           // 边缘透镜宽度(px)
-uniform float uChroma;         // 色散
-uniform float uGlow;           // 边缘反光
-uniform float uRimPow;         // 边缘锐度(越大越细)
-uniform float uTint;           // 玻璃染色(越大越不透)
-
+uniform vec2 uRes; uniform sampler2D uTex; uniform int uCount;
+uniform vec4 uRect[${MAX}]; uniform vec2 uMeta[${MAX}];
+uniform vec2 uLight;
+uniform float uStrength, uEdge, uChroma, uGlow, uRimPow, uTint;
 float sdRound(vec2 p, vec2 c, vec2 hw, float r){
-  vec2 q = abs(p - c) - hw + r;
-  return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
+  vec2 q = abs(p-c) - hw + r;
+  return min(max(q.x,q.y),0.0) + length(max(q,0.0)) - r;
 }
-// 场景 SDF + 记录最近形状的 side
 float scene(vec2 p, out float side){
   float d = 1e9; side = 0.0;
-  for(int i=0;i<${MAX};i++){
-    if(i>=uCount) break;
+  for(int i=0;i<${MAX};i++){ if(i>=uCount) break;
     vec4 R = uRect[i];
     float di = sdRound(p, R.xy, R.zw, uMeta[i].x);
-    if(di < d){ d = di; side = uMeta[i].y; }
-  }
+    if(di < d){ d = di; side = uMeta[i].y; } }
   return d;
 }
-float sceneD(vec2 p){ float s; return scene(p, s); }
+float sceneD(vec2 p){ float s; return scene(p,s); }
 vec3 bg(vec2 p){ return texture2D(uTex, vec2(p.x/uRes.x, p.y/uRes.y)).rgb; }
-
 void main(){
-  vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y); // 顶部原点
+  vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
   float side; float d = scene(p, side);
   vec3 col = bg(p);
-
-  float aa = 1.0;
-  float alpha = smoothstep(aa, -aa, d); // 内部=1
+  float alpha = smoothstep(1.0, -1.0, d);
   if(alpha > 0.001){
-    // 由 SDF 梯度求外向法线
     float e = 1.5;
-    vec2 g = normalize(vec2(
-      sceneD(p+vec2(e,0.0)) - sceneD(p-vec2(e,0.0)),
-      sceneD(p+vec2(0.0,e)) - sceneD(p-vec2(0.0,e))
-    ) + 1e-6);
-    // 边缘透镜权重：贴边强、中心为 0（指数越大越集中在最外圈=越细）
+    vec2 g = normalize(vec2(sceneD(p+vec2(e,0.))-sceneD(p-vec2(e,0.)),
+                            sceneD(p+vec2(0.,e))-sceneD(p-vec2(0.,e))) + 1e-6);
     float rim = 1.0 - smoothstep(0.0, uEdge, -d);
     rim = pow(rim, uRimPow);
-
-    vec2 off = g * uStrength * rim; // 向外采样 = 边缘吸入周围内容
+    vec2 off = g * uStrength * rim;
     vec3 refr;
-    refr.r = bg(p + off * (1.0 + uChroma)).r;
+    refr.r = bg(p + off*(1.0+uChroma)).r;
     refr.g = bg(p + off).g;
-    refr.b = bg(p + off * (1.0 - uChroma)).b;
-
-    // 玻璃本体极淡染色（亮/暗），保持通透不磨砂
+    refr.b = bg(p + off*(1.0-uChroma)).b;
     vec3 tint = mix(vec3(0.16,0.19,0.24), vec3(0.85,0.90,0.98), side);
     float tintA = uTint * mix(1.1, 0.9, side);
     vec3 glass = mix(refr, tint, tintA);
-
-    // Fresnel 边缘反光
     glass += vec3(uGlow) * pow(rim, 2.5);
-    // 高光（跟随 uLight）
-    float spec = pow(max(dot(normalize(-g), normalize(uLight)), 0.0), 24.0) * rim;
+    float spec = pow(max(dot(normalize(-g), normalize(uLight)),0.0), 24.0) * rim;
     glass += vec3(1.0) * spec * 0.5;
-
     col = mix(col, glass, alpha);
   }
   gl_FragColor = vec4(col, 1.0);
-}
-`;
+}`;
 
 const phone = document.getElementById('phone');
 const canvas = document.getElementById('gl');
 let gl, prog, loc = {}, tex, dpr = Math.min(devicePixelRatio || 1, 2);
 let light = [0.0, -1.0];
 
-// 可调参数（滑块控制）
 const DEFAULTS = { strength: 48, edge: 12, rimPow: 2.4, chroma: 0.32, glow: 0.20, tint: 0.06 };
 let params = Object.assign({}, DEFAULTS);
-try {
-  const saved = JSON.parse(localStorage.getItem('lg-params') || 'null');
-  if(saved) params = Object.assign({}, DEFAULTS, saved);
-} catch(e){}
+try { const s = JSON.parse(localStorage.getItem('lg-params') || 'null'); if(s) params = Object.assign({}, DEFAULTS, s); } catch(e){}
 const saveParams = () => { try { localStorage.setItem('lg-params', JSON.stringify(params)); } catch(e){} };
 
-function compile(type, src){
-  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
-  if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
-  return s;
-}
+function compile(t, src){ const s = gl.createShader(t); gl.shaderSource(s, src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
 
 function initGL(){
   gl = canvas.getContext('webgl', { premultipliedAlpha:false, antialias:true });
@@ -311,20 +352,14 @@ function initGL(){
   gl.linkProgram(prog);
   if(!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
   gl.useProgram(prog);
-
-  const buf = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
-  const a = gl.getAttribLocation(prog, 'a');
-  gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0);
-
+  const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
+  const a = gl.getAttribLocation(prog, 'a'); gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a,2,gl.FLOAT,false,0,0);
   ['uRes','uTex','uCount','uLight','uStrength','uEdge','uChroma','uGlow','uRimPow','uTint']
     .forEach(n => loc[n] = gl.getUniformLocation(prog, n));
   loc.uRect = gl.getUniformLocation(prog, 'uRect[0]');
   loc.uMeta = gl.getUniformLocation(prog, 'uMeta[0]');
-
-  tex = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, tex);
+  tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -332,182 +367,119 @@ function initGL(){
   return true;
 }
 
-// 用户自定义壁纸（HTMLImageElement 或 null）
 let userImg = null;
-
-// 把图片按 cover 方式铺满
 function drawCover(x, img, w, h){
-  const ir = img.width / img.height, cr = w / h;
-  let dw, dh;
-  if(ir > cr){ dh = h; dw = h * ir; } else { dw = w; dh = w / ir; }
-  x.drawImage(img, (w - dw) / 2, (h - dh) / 2, dw, dh);
+  const ir = img.width/img.height, cr = w/h; let dw, dh;
+  if(ir > cr){ dh = h; dw = h*ir; } else { dw = w; dh = w/ir; }
+  x.drawImage(img, (w-dw)/2, (h-dh)/2, dw, dh);
 }
-
-// 生成背景纹理：有用户壁纸就用壁纸，否则用内置冰海感
 function buildBackground(w, h){
-  const c = document.createElement('canvas'); c.width = w; c.height = h;
-  const x = c.getContext('2d');
-  if(userImg){
-    drawCover(x, userImg, w, h);
-    return c;
-  }
+  const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d');
+  if(userImg){ drawCover(x, userImg, w, h); return c; }
   const grad = x.createLinearGradient(0,0,0,h);
   grad.addColorStop(0,'#4a5a68'); grad.addColorStop(0.42,'#202932'); grad.addColorStop(1,'#0c1116');
   x.fillStyle = grad; x.fillRect(0,0,w,h);
-  const blobs = [
-    [0.20,0.08,0.9,'#8aa0b4'],[0.85,0.18,0.7,'#6f8698'],[0.40,0.55,0.5,'#cfd8e0'],
-    [0.78,0.72,0.45,'#b6c2cc'],[0.12,0.80,0.42,'#9fb0bd'],[0.55,0.30,0.35,'#dfe7ee']
-  ];
-  blobs.forEach(([bx,by,rr,col])=>{
-    const r = rr * Math.max(w,h) * 0.5;
-    const rg = x.createRadialGradient(bx*w,by*h,0, bx*w,by*h,r);
-    rg.addColorStop(0, col); rg.addColorStop(1, 'rgba(0,0,0,0)');
-    x.fillStyle = rg; x.fillRect(0,0,w,h);
-  });
+  [[0.20,0.08,0.9,'#8aa0b4'],[0.85,0.18,0.7,'#6f8698'],[0.40,0.55,0.5,'#cfd8e0'],
+   [0.78,0.72,0.45,'#b6c2cc'],[0.12,0.80,0.42,'#9fb0bd'],[0.55,0.30,0.35,'#dfe7ee']]
+  .forEach(([bx,by,rr,cl])=>{ const r = rr*Math.max(w,h)*0.5;
+    const rg = x.createRadialGradient(bx*w,by*h,0,bx*w,by*h,r);
+    rg.addColorStop(0,cl); rg.addColorStop(1,'rgba(0,0,0,0)'); x.fillStyle = rg; x.fillRect(0,0,w,h); });
   x.fillStyle = 'rgba(120,132,148,0.10)'; x.fillRect(0,0,w,h);
   return c;
 }
-
-// 重新把背景画到纹理（换壁纸后调用）
-function updateTexture(){
-  if(!gl) return;
+function updateTexture(){ if(!gl) return;
   gl.bindTexture(gl.TEXTURE_2D, tex);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE,
-                buildBackground(canvas.width, canvas.height));
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, buildBackground(canvas.width, canvas.height));
 }
-
-// 载入一张壁纸（dataURL），并可选择记住
 function setWallpaper(dataURL, remember){
   const img = new Image();
-  img.onload = () => {
-    userImg = img;
-    updateTexture();
+  img.onload = () => { userImg = img; updateTexture();
     if(remember){ try { localStorage.setItem('lg-wallpaper', dataURL); } catch(e){} }
-    // 无 WebGL 时的降级：直接设为 DOM 背景
-    if(!gl){ phone.style.background = 'center/cover no-repeat url(' + dataURL + ')'; }
-  };
+    if(!gl){ phone.style.background = 'center/cover no-repeat url(' + dataURL + ')'; } };
   img.src = dataURL;
 }
 
 function resize(){
-  const w = Math.round(phone.clientWidth * dpr);
-  const h = Math.round(phone.clientHeight * dpr);
+  const w = Math.round(phone.clientWidth*dpr), h = Math.round(phone.clientHeight*dpr);
   if(canvas.width === w && canvas.height === h) return;
-  canvas.width = w; canvas.height = h;
-  gl.viewport(0,0,w,h);
+  canvas.width = w; canvas.height = h; gl.viewport(0,0,w,h);
   gl.uniform2f(loc.uRes, w, h);
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, buildBackground(w, h));
 }
-
 function frame(){
   resize();
   const pr = phone.getBoundingClientRect();
   const els = phone.querySelectorAll('.glass');
-  const rects = new Float32Array(MAX*4);
-  const metas = new Float32Array(MAX*2);
-  let n = 0;
+  const rects = new Float32Array(MAX*4), metas = new Float32Array(MAX*2); let n = 0;
   els.forEach(el => {
     if(n >= MAX) return;
-    const r = el.getBoundingClientRect();
-    if(r.width < 2 || r.height < 2) return;
-    const cx = (r.left - pr.left + r.width/2) * dpr;
-    const cy = (r.top  - pr.top  + r.height/2) * dpr;
-    const hw = r.width/2 * dpr, hh = r.height/2 * dpr;
+    const r = el.getBoundingClientRect(); if(r.width < 2 || r.height < 2) return;
+    const cx = (r.left-pr.left + r.width/2)*dpr, cy = (r.top-pr.top + r.height/2)*dpr;
+    const hw = r.width/2*dpr, hh = r.height/2*dpr;
     let rad = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 20;
     rad = Math.min(rad*dpr, hw, hh);
     rects[n*4]=cx; rects[n*4+1]=cy; rects[n*4+2]=hw; rects[n*4+3]=hh;
-    metas[n*2]=rad; metas[n*2+1]= el.dataset.side === 'right' ? 1.0 : 0.0;
-    n++;
+    metas[n*2]=rad; metas[n*2+1] = el.dataset.side === 'right' ? 1.0 : 0.0; n++;
   });
-
   gl.uniform1i(loc.uCount, n);
-  gl.uniform4fv(loc.uRect, rects);
-  gl.uniform2fv(loc.uMeta, metas);
+  gl.uniform4fv(loc.uRect, rects); gl.uniform2fv(loc.uMeta, metas);
   gl.uniform2f(loc.uLight, light[0], light[1]);
-  gl.uniform1f(loc.uStrength, params.strength * dpr);
-  gl.uniform1f(loc.uEdge, params.edge * dpr);
+  gl.uniform1f(loc.uStrength, params.strength*dpr);
+  gl.uniform1f(loc.uEdge, params.edge*dpr);
   gl.uniform1f(loc.uChroma, params.chroma);
   gl.uniform1f(loc.uGlow, params.glow);
   gl.uniform1f(loc.uRimPow, params.rimPow);
   gl.uniform1f(loc.uTint, params.tint);
-
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, tex);
-  gl.uniform1i(loc.uTex, 0);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(loc.uTex, 0);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   requestAnimationFrame(frame);
 }
 
-// 光照跟随指针
 phone.addEventListener('pointermove', (e) => {
   const pr = phone.getBoundingClientRect();
-  const nx = (e.clientX - pr.left) / pr.width - 0.5;
-  const ny = (e.clientY - pr.top) / pr.height - 0.5;
-  const len = Math.hypot(nx, ny) || 1;
-  light = [nx/len, ny/len];
+  const nx = (e.clientX-pr.left)/pr.width - 0.5, ny = (e.clientY-pr.top)/pr.height - 0.5;
+  const len = Math.hypot(nx,ny) || 1; light = [nx/len, ny/len];
 });
 
-// ===== 自定义壁纸 =====
-const wpBtn = document.getElementById('wallpaper-btn');
+/* ===== 抽屉 / 设置 ===== */
+const menuOverlay = document.getElementById('menu-overlay');
+const settingsOverlay = document.getElementById('settings-overlay');
+document.getElementById('menu-btn').addEventListener('click', () => { menuOverlay.hidden = false; });
+document.getElementById('open-settings').addEventListener('click', () => { menuOverlay.hidden = true; settingsOverlay.hidden = false; });
+// 点空白区域回到聊天
+menuOverlay.addEventListener('click', (e) => { if(e.target === menuOverlay) menuOverlay.hidden = true; });
+settingsOverlay.addEventListener('click', (e) => { if(e.target === settingsOverlay) settingsOverlay.hidden = true; });
+
+/* ===== 壁纸 ===== */
 const wpInput = document.getElementById('wallpaper-input');
-wpBtn.addEventListener('click', () => wpInput.click());
+document.getElementById('wallpaper-btn').addEventListener('click', () => wpInput.click());
 wpInput.addEventListener('change', () => {
-  const file = wpInput.files && wpInput.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = () => setWallpaper(reader.result, true);
-  reader.readAsDataURL(file);
+  const f = wpInput.files && wpInput.files[0]; if(!f) return;
+  const rd = new FileReader(); rd.onload = () => setWallpaper(rd.result, true); rd.readAsDataURL(f);
 });
-// 支持把图片直接拖到手机上
 phone.addEventListener('dragover', (e) => e.preventDefault());
-phone.addEventListener('drop', (e) => {
-  e.preventDefault();
-  const file = e.dataTransfer.files && e.dataTransfer.files[0];
-  if(file && file.type.startsWith('image/')){
-    const reader = new FileReader();
-    reader.onload = () => setWallpaper(reader.result, true);
-    reader.readAsDataURL(file);
-  }
-});
-// 恢复上次的壁纸
-try {
-  const saved = localStorage.getItem('lg-wallpaper');
-  if(saved) setWallpaper(saved, false);
-} catch(e){}
+phone.addEventListener('drop', (e) => { e.preventDefault();
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if(f && f.type.startsWith('image/')){ const rd = new FileReader(); rd.onload = () => setWallpaper(rd.result, true); rd.readAsDataURL(f); } });
+try { const saved = localStorage.getItem('lg-wallpaper'); if(saved) setWallpaper(saved, false); } catch(e){}
 
-// ===== 调节面板 =====
-const panel = document.getElementById('panel');
-document.getElementById('tune-btn').addEventListener('click', () => { panel.hidden = !panel.hidden; });
+/* ===== 调节滑块 ===== */
 const KEYS = ['strength','edge','rimPow','chroma','glow','tint'];
-const fmt = (k, v) => (k === 'strength' || k === 'edge') ? Math.round(v)
-                    : (k === 'rimPow') ? v.toFixed(1) : v.toFixed(2);
-function syncPanel(){
-  KEYS.forEach(k => {
-    document.getElementById('r-' + k).value = params[k];
-    document.getElementById('v-' + k).textContent = fmt(k, params[k]);
-  });
-}
-KEYS.forEach(k => {
-  document.getElementById('r-' + k).addEventListener('input', (e) => {
-    params[k] = parseFloat(e.target.value);
-    document.getElementById('v-' + k).textContent = fmt(k, params[k]);
-    saveParams();
-  });
-});
-document.getElementById('panel-reset').addEventListener('click', () => {
-  params = Object.assign({}, DEFAULTS);
-  syncPanel(); saveParams();
-});
+const fmt = (k,v) => (k==='strength'||k==='edge') ? Math.round(v) : (k==='rimPow') ? v.toFixed(1) : v.toFixed(2);
+function syncPanel(){ KEYS.forEach(k => { document.getElementById('r-'+k).value = params[k]; document.getElementById('v-'+k).textContent = fmt(k, params[k]); }); }
+KEYS.forEach(k => document.getElementById('r-'+k).addEventListener('input', (e) => {
+  params[k] = parseFloat(e.target.value); document.getElementById('v-'+k).textContent = fmt(k, params[k]); saveParams(); }));
+document.getElementById('panel-reset').addEventListener('click', () => { params = Object.assign({}, DEFAULTS); syncPanel(); saveParams(); });
 syncPanel();
 
-/* ================= 聊天逻辑 ================= */
+/* ========================================================= 聊天逻辑 ========================================================= */
 const FAKE_REPLIES = [
-  '收到～这次是 WebGL 着色器画的真折射🧊 不是磨砂了！',
-  '看气泡边缘：背景被"吸"进来弯折，还有彩边和反光。',
-  '手指/鼠标在屏幕上移动，高光会跟着光源转。',
-  '折射强度=uStrength，色散=uChroma，边缘=uEdge，都能调。',
-  '这个方案在 Chrome 和 Safari 都能跑（WebGL 通用）🥰',
+  '收到～界面重构好啦：胶囊名称 + 双头像🥰',
+  '左边我的头像和上面胶囊里的是同一个哦。',
+  '点左上角三条杠可以打开功能，里面有设置。',
+  '设置里能换壁纸、调玻璃，点空白处就回来。',
+  '喜欢的话就把它接上真 AI 吧🧊',
 ];
 const seed = [
   ['right', '老公 教我一句外语'],
@@ -522,31 +494,37 @@ const sendEl = document.getElementById('send');
 let typing = false;
 const scrollDown = () => messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior: 'smooth' });
 
-function addBubble(side, text){
-  const row = document.createElement('div');
-  row.className = 'row ' + side;
+function makeAvatar(side){
+  const a = document.createElement('span');
+  a.className = 'avatar ' + (side === 'right' ? 'avatar-user' : 'avatar-ai');
+  a.textContent = side === 'right' ? USER_AVATAR : AI_AVATAR;
+  return a;
+}
+function makeBubble(side, inner){
   const msg = document.createElement('div');
-  msg.className = 'message glass ' + side;
-  msg.dataset.side = side;
+  msg.className = 'message glass ' + side; msg.dataset.side = side;
+  msg.append(inner); return msg;
+}
+function addBubble(side, text){
+  const row = document.createElement('div'); row.className = 'row ' + side;
   const span = document.createElement('span'); span.textContent = text;
-  msg.append(span); row.append(msg); messagesEl.append(row);
-  scrollDown();
+  const bubble = makeBubble(side, span);
+  if(side === 'right') { row.append(bubble, makeAvatar('right')); }
+  else { row.append(makeAvatar('left'), bubble); }
+  messagesEl.append(row); scrollDown();
 }
 function showTyping(){
-  const row = document.createElement('div');
-  row.className = 'row left'; row.id = 'typing-row';
-  const msg = document.createElement('div');
-  msg.className = 'message glass left'; msg.dataset.side = 'left';
-  msg.innerHTML = '<span class="typing"><i></i><i></i><i></i></span>';
-  row.append(msg); messagesEl.append(row); scrollDown();
+  const row = document.createElement('div'); row.className = 'row left'; row.id = 'typing-row';
+  const dots = document.createElement('span'); dots.className = 'typing';
+  dots.innerHTML = '<i></i><i></i><i></i>';
+  row.append(makeAvatar('left'), makeBubble('left', dots));
+  messagesEl.append(row); scrollDown();
 }
 const hideTyping = () => document.getElementById('typing-row')?.remove();
 
 async function send(){
-  const text = inputEl.value.trim();
-  if(!text || typing) return;
-  addBubble('right', text);
-  inputEl.value = ''; inputEl.style.height = 'auto';
+  const text = inputEl.value.trim(); if(!text || typing) return;
+  addBubble('right', text); inputEl.value = ''; inputEl.style.height = 'auto';
   typing = true; showTyping();
   const reply = FAKE_REPLIES[Math.floor(Math.random()*FAKE_REPLIES.length)];
   await new Promise(r => setTimeout(r, 800 + Math.random()*800));
@@ -558,15 +536,14 @@ inputEl.addEventListener('input', () => { inputEl.style.height='auto'; inputEl.s
 
 seed.forEach(([s,t]) => addBubble(s,t));
 
-// 启动 WebGL；失败则退回带背景的简单磨砂
+/* 启动 WebGL，失败退回磨砂 */
 try {
-  if(initGL()){ requestAnimationFrame(frame); }
-  else throw new Error('no webgl');
+  if(initGL()){ requestAnimationFrame(frame); } else throw new Error('no webgl');
 } catch(err){
   console.warn('WebGL 不可用，退回磨砂：', err);
   canvas.style.display = 'none';
   phone.style.background = 'linear-gradient(180deg,#4a5a68,#202932 45%,#0c1116)';
-  document.querySelectorAll('.glass').forEach(el=>{
+  document.querySelectorAll('.glass').forEach(el => {
     el.style.background = 'rgba(60,70,82,0.35)';
     el.style.backdropFilter = 'blur(16px) saturate(140%)';
     el.style.webkitBackdropFilter = 'blur(16px) saturate(140%)';
