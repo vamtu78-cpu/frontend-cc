@@ -586,7 +586,7 @@ void main(){
   vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
   float side; float d = scene(p, side);
   vec3 col = bg(p);
-  float alpha = smoothstep(1.0, -1.0, d);
+  float alpha = smoothstep(1.6, -1.6, d);
   if(alpha > 0.001){
     float e = 1.5;
     vec2 g = normalize(vec2(sceneD(p+vec2(e,0.))-sceneD(p-vec2(e,0.)),
@@ -596,6 +596,8 @@ void main(){
     vec2 off = g * uStrength * rim;
     // 输入框/顶栏(neutral)磨砂更高、内部更均匀；气泡折射优先
     float blur = (side > 1.5) ? uBlurN : uBlur;
+    // 关键：边缘(折射最强处)磨砂也最强，把高对比背景的折射"截断缝"揉化掉
+    blur *= (1.0 + rim * 2.2);
     vec3 refr;
     refr.r = bgB(p + off*(1.0+uChroma), blur).r;
     refr.g = bgB(p + off, blur).g;
