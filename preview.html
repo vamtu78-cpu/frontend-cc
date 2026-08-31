@@ -132,6 +132,59 @@
   .attach-thumb { position: relative; width: 56px; height: 56px; flex-shrink: 0; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.25); }
   .attach-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .attach-thumb button { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border-radius: 999px; background: rgba(0,0,0,0.6); color: #fff; border: none; font-size: 11px; line-height: 1; cursor: pointer; padding: 0; }
+  /* + 展开功能面板（微信风） */
+  .fn-panel {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+    padding: 14px; margin-bottom: 8px; border-radius: 20px;
+    background: rgba(24,30,38,0.72);
+    border: 1px solid rgba(255,255,255,0.14);
+    backdrop-filter: blur(24px) saturate(140%); -webkit-backdrop-filter: blur(24px) saturate(140%);
+    animation: fadeUp 0.18s ease-out;
+  }
+  .fn-panel[hidden] { display: none; }
+  .fn-tile {
+    display: flex; flex-direction: column; align-items: center; gap: 7px;
+    background: transparent; border: none; color: rgba(255,255,255,0.85); font-size: 12px; cursor: pointer; padding: 0;
+  }
+  .fn-ic {
+    width: 54px; height: 54px; border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.14);
+  }
+  .fn-ic svg { width: 26px; height: 26px; fill: none; stroke: #fff; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* 表情包面板 */
+  .sticker-panel {
+    padding: 12px; margin-bottom: 8px; border-radius: 20px;
+    background: rgba(24,30,38,0.72);
+    border: 1px solid rgba(255,255,255,0.14);
+    backdrop-filter: blur(24px) saturate(140%); -webkit-backdrop-filter: blur(24px) saturate(140%);
+    animation: fadeUp 0.18s ease-out;
+  }
+  .sticker-panel[hidden] { display: none; }
+  .sticker-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+    max-height: 180px; overflow-y: auto; margin-bottom: 10px;
+  }
+  .sticker-grid::-webkit-scrollbar { width: 0; }
+  .sticker-item { position: relative; aspect-ratio: 1; cursor: pointer; }
+  .sticker-item img { width: 100%; height: 100%; object-fit: contain; border-radius: 10px; background: rgba(255,255,255,0.06); }
+  .sticker-item .sd { position: absolute; top: -4px; right: -4px; width: 18px; height: 18px; border-radius: 999px; background: rgba(0,0,0,0.7); color: #fff; border: none; font-size: 11px; line-height: 1; cursor: pointer; padding: 0; }
+  .sticker-empty { grid-column: 1 / -1; text-align: center; color: rgba(255,255,255,0.5); font-size: 12px; padding: 16px 0; }
+  .sticker-add { display: flex; gap: 8px; }
+  .sticker-add input { flex: 1; min-width: 0; background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.18); border-radius: 999px; padding: 8px 12px; font-size: 13px; outline: none; }
+  .sticker-add .btn.small { flex-shrink: 0; }
+
+  /* 消息里的表情包：无气泡、透明底 */
+  .msg-sticker { display: block; max-width: 128px; max-height: 128px; border-radius: 12px; cursor: pointer; }
+
+  /* 文件卡片 */
+  .msg-file { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 12px; background: rgba(255,255,255,0.1); margin-bottom: 6px; max-width: 220px; }
+  .msg-file svg { width: 22px; height: 22px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.7; }
+  .msg-file span { font-size: 13px; word-break: break-all; }
+  .attach-file { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 12px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.18); color: #fff; font-size: 12px; flex-shrink: 0; }
+  .attach-file button { background: transparent; border: none; color: rgba(255,255,255,0.6); cursor: pointer; font-size: 12px; padding: 0; }
+
   /* 消息里的图：方形小图，点开看全图；文字在下 */
   .message.media { flex-direction: column; align-items: stretch; }
   .msg-img { display: block; width: 150px; height: 150px; object-fit: cover; border-radius: 14px; margin-bottom: 6px; cursor: pointer; }
@@ -314,9 +367,32 @@
   <div class="messages" id="messages"></div>
 
   <div class="composer">
+    <!-- + 展开功能面板 -->
+    <div class="fn-panel" id="plus-panel" hidden>
+      <button class="fn-tile" id="fn-photo">
+        <span class="fn-ic"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M4 17l4.5-4.5 4 4L16 12l4 5"/></svg></span>图片
+      </button>
+      <button class="fn-tile" id="fn-file">
+        <span class="fn-ic"><svg viewBox="0 0 24 24"><path d="M4 6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg></span>文件
+      </button>
+      <button class="fn-tile" id="fn-sticker">
+        <span class="fn-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="9" cy="10" r="1"/><circle cx="15" cy="10" r="1"/><path d="M8.5 14.5a4 4 0 0 0 7 0"/></svg></span>表情包
+      </button>
+    </div>
+
+    <!-- 表情包面板 -->
+    <div class="sticker-panel" id="sticker-panel" hidden>
+      <div class="sticker-grid" id="sticker-grid"></div>
+      <div class="sticker-add">
+        <input type="text" id="sticker-url" placeholder="粘贴图片 URL 添加表情" autocapitalize="off" autocomplete="off" spellcheck="false">
+        <button class="btn small" id="sticker-url-add">添加</button>
+        <button class="btn small" id="sticker-upload">上传</button>
+      </div>
+    </div>
+
     <div class="attach-strip" id="attach-strip" hidden></div>
     <div class="glass inputbar" data-side="left" data-color="neutral">
-      <button class="icon-btn" id="plus-btn" aria-label="添加图片">＋</button>
+      <button class="icon-btn" id="plus-btn" aria-label="更多">＋</button>
       <textarea id="input" rows="1" placeholder="Type a message..."></textarea>
       <button class="send" id="send" aria-label="发送">
         <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
@@ -500,6 +576,8 @@
   <input type="file" id="user-avatar-input" accept="image/*" style="display:none" />
   <input type="file" id="font-input" accept=".ttf,.otf,.woff,.woff2,font/*" style="display:none" />
   <input type="file" id="attach-input" accept="image/*" multiple style="display:none" />
+  <input type="file" id="file-input" multiple style="display:none" />
+  <input type="file" id="sticker-upload-input" accept="image/*" style="display:none" />
 
   <!-- 全图预览 -->
   <div class="lightbox" id="img-lightbox" hidden><img id="lightbox-img" src="" alt=""></div>
@@ -815,11 +893,15 @@ const saveHistory = () => { if(history.length > 80) history.splice(0, history.le
 function renderMessages(){
   const el = document.getElementById('messages'); el.innerHTML = '';
   history.forEach(m => {
-    if(m.role === 'user'){ addBubble('right', m.content); return; }
+    if(m.role === 'user'){
+      const sm = String(m.content || '').match(STICKER_RE);
+      if(sm) addUserSticker(sm[1]); else addBubble('right', m.content);
+      return;
+    }
     const segs = String(m.content || '').split(SPLIT_TOKEN).map(s => s.trim()).filter(Boolean);
     const list = segs.length ? segs : [String(m.content || '')];
     let first = null;
-    list.forEach((seg, i) => { const sp = addBubble('left', seg); if(i === 0) first = sp; });
+    list.forEach((seg, i) => { const el2 = addAiSeg(seg); if(i === 0) first = el2; });
     if(first && m.reasoning) attachReasoning(first, m.reasoning);
   });
 }
@@ -1041,11 +1123,17 @@ const lightbox = document.getElementById('img-lightbox');
 function openLightbox(url){ document.getElementById('lightbox-img').src = url; lightbox.hidden = false; }
 lightbox.addEventListener('click', () => { lightbox.hidden = true; });
 
-// 用户消息（图片在上，文字在下；单图=方块，多图=田字；点图看全图）
-function addUserMessage(text, images){
-  images = images || [];
+// 用户消息（图片/文件在上，文字在下；单图=方块，多图=田字；点图看全图）
+function addUserMessage(text, images, files){
+  images = images || []; files = files || [];
   const frag = document.createDocumentFragment();
   const mkImg = (u, cls) => { const im = document.createElement('img'); im.className = cls; im.src = u; im.addEventListener('click', () => openLightbox(u)); return im; };
+  files.forEach(f => {
+    const card = document.createElement('div'); card.className = 'msg-file';
+    card.innerHTML = '<svg viewBox="0 0 24 24"><path d="M4 6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg><span></span>';
+    card.querySelector('span').textContent = f.name;
+    frag.append(card);
+  });
   if(images.length === 1){
     frag.append(mkImg(images[0], 'msg-img'));
   } else if(images.length > 1){
@@ -1056,11 +1144,36 @@ function addUserMessage(text, images){
   const span = document.createElement('span'); span.textContent = text || ''; if(text) frag.append(span);
   const row = document.createElement('div'); row.className = 'row right';
   const msg = makeBubble('right', frag);
-  if(images.length){ msg.classList.add('media'); row.classList.add('multiline'); } // 有图 → 头像顶端对齐
+  const hasMedia = images.length || files.length;
+  if(hasMedia){ msg.classList.add('media'); row.classList.add('multiline'); }
   row.append(msg, makeAvatar('right'));
   messagesEl.append(row);
-  if(!images.length) requestAnimationFrame(() => alignRow(row, span)); // 有图时保持顶端对齐，不再按行数覆盖
+  if(!hasMedia) requestAnimationFrame(() => alignRow(row, span));
   scrollDown();
+}
+// 用户发送的表情包（无气泡透明底）
+function addUserSticker(url){
+  const row = document.createElement('div'); row.className = 'row right multiline';
+  const im = document.createElement('img'); im.className = 'msg-sticker'; im.src = url;
+  im.addEventListener('click', () => openLightbox(url));
+  row.append(im, makeAvatar('right'));
+  messagesEl.append(row); scrollDown();
+}
+// AI 的一段：表情包 token → 表情图；否则文字气泡。返回内容元素(用于挂思维链)
+function addAiSeg(seg){
+  const m = seg.match(STICKER_RE);
+  const row = document.createElement('div'); row.className = 'row left'; const avatar = makeAvatar('left');
+  if(m){
+    row.classList.add('multiline');
+    const im = document.createElement('img'); im.className = 'msg-sticker'; im.src = m[1];
+    im.addEventListener('click', () => openLightbox(m[1]));
+    row.append(avatar, im); messagesEl.append(row); scrollDown();
+    return im;
+  }
+  const span = document.createElement('span'); span.textContent = seg;
+  row.append(avatar, makeBubble('left', span)); messagesEl.append(row);
+  requestAnimationFrame(() => alignRow(row, span)); scrollDown();
+  return span;
 }
 
 // 上传前压缩，避免请求过大(413)
@@ -1084,12 +1197,19 @@ function resizeImage(file, maxDim = 1280, quality = 0.82){
   });
 }
 
-// 待发送的图片
-let pendingImages = [];
+// 待发送的图片 / 文件
+let pendingImages = [], pendingFiles = [];
 const attachInput = document.getElementById('attach-input');
 const attachStrip = document.getElementById('attach-strip');
+
+// 表情包库（url 数组）
+let stickers = [];
+try { stickers = JSON.parse(localStorage.getItem('lg-stickers') || '[]') || []; } catch(e){}
+const saveStickers = () => { try { localStorage.setItem('lg-stickers', JSON.stringify(stickers)); } catch(e){} };
+const STICKER_RE = /^\[\[sticker:\s*([^\]]+?)\s*\]\]$/;
 function renderStrip(){
-  attachStrip.innerHTML = ''; attachStrip.hidden = pendingImages.length === 0;
+  attachStrip.innerHTML = '';
+  attachStrip.hidden = pendingImages.length === 0 && pendingFiles.length === 0;
   pendingImages.forEach((u, i) => {
     const t = document.createElement('div'); t.className = 'attach-thumb';
     const im = document.createElement('img'); im.src = u;
@@ -1097,18 +1217,81 @@ function renderStrip(){
     del.addEventListener('click', () => { pendingImages.splice(i, 1); renderStrip(); });
     t.append(im, del); attachStrip.append(t);
   });
+  pendingFiles.forEach((f, i) => {
+    const chip = document.createElement('div'); chip.className = 'attach-file';
+    const name = document.createElement('span'); name.textContent = '📄 ' + f.name;
+    const del = document.createElement('button'); del.textContent = '✕';
+    del.addEventListener('click', () => { pendingFiles.splice(i, 1); renderStrip(); });
+    chip.append(name, del); attachStrip.append(chip);
+  });
 }
-async function addFiles(files){
+// 图片：压缩加入待发图片
+async function addImages(files){
   for(const f of files){ if(!f.type.startsWith('image/')) continue; const url = await resizeImage(f); pendingImages.push(url); renderStrip(); }
 }
-document.getElementById('plus-btn').addEventListener('click', () => attachInput.click());
-attachInput.addEventListener('change', () => { addFiles(Array.from(attachInput.files || [])); attachInput.value = ''; });
+// 文件：图片走图片；文本类读取内容；其它仅记文件名
+const TEXT_RE = /\.(txt|md|markdown|json|csv|log|js|ts|jsx|tsx|py|java|c|cpp|h|css|html|xml|yml|yaml|ini|sh|go|rs|php|rb|sql)$/i;
+function readText(file){ return new Promise(r => { const rd = new FileReader(); rd.onload = () => r(String(rd.result || '')); rd.onerror = () => r(''); rd.readAsText(file); }); }
+async function addAnyFiles(files){
+  for(const f of files){
+    if(f.type.startsWith('image/')){ const url = await resizeImage(f); pendingImages.push(url); }
+    else if(TEXT_RE.test(f.name) || f.type.startsWith('text/')){ const txt = await readText(f); pendingFiles.push({ name: f.name, text: txt.slice(0, 20000) }); }
+    else { pendingFiles.push({ name: f.name, text: null }); }
+    renderStrip();
+  }
+}
+
+/* ===== + 展开面板 / 表情包面板 ===== */
+const plusPanel = document.getElementById('plus-panel');
+const stickerPanel = document.getElementById('sticker-panel');
+const fileInput = document.getElementById('file-input');
+const stickerUploadInput = document.getElementById('sticker-upload-input');
+function closePanels(){ plusPanel.hidden = true; stickerPanel.hidden = true; }
+document.getElementById('plus-btn').addEventListener('click', () => {
+  const willOpen = plusPanel.hidden;
+  closePanels(); plusPanel.hidden = !willOpen;
+});
+document.getElementById('fn-photo').addEventListener('click', () => { closePanels(); attachInput.click(); });
+document.getElementById('fn-file').addEventListener('click', () => { closePanels(); fileInput.click(); });
+document.getElementById('fn-sticker').addEventListener('click', () => { plusPanel.hidden = true; renderStickerGrid(); stickerPanel.hidden = false; });
+inputEl.addEventListener('focus', closePanels);
+attachInput.addEventListener('change', () => { addImages(Array.from(attachInput.files || [])); attachInput.value = ''; });
+fileInput.addEventListener('change', () => { addAnyFiles(Array.from(fileInput.files || [])); fileInput.value = ''; });
+
+/* ===== 表情包 ===== */
+function renderStickerGrid(){
+  const grid = document.getElementById('sticker-grid'); grid.innerHTML = '';
+  if(!stickers.length){ const e = document.createElement('div'); e.className = 'sticker-empty'; e.textContent = '还没有表情包，用下面上传或粘贴 URL 添加'; grid.append(e); return; }
+  stickers.forEach((url, i) => {
+    const it = document.createElement('div'); it.className = 'sticker-item';
+    const im = document.createElement('img'); im.src = url;
+    it.addEventListener('click', () => sendSticker(url));
+    const del = document.createElement('button'); del.className = 'sd'; del.textContent = '✕';
+    del.addEventListener('click', (e) => { e.stopPropagation(); stickers.splice(i, 1); saveStickers(); renderStickerGrid(); });
+    it.append(im, del); grid.append(it);
+  });
+}
+function addSticker(url){ if(!url) return; stickers.push(url); saveStickers(); renderStickerGrid(); }
+document.getElementById('sticker-url-add').addEventListener('click', () => {
+  const inp = document.getElementById('sticker-url'); const u = inp.value.trim();
+  if(u){ addSticker(u); inp.value = ''; }
+});
+document.getElementById('sticker-upload').addEventListener('click', () => stickerUploadInput.click());
+stickerUploadInput.addEventListener('change', async () => {
+  const f = stickerUploadInput.files && stickerUploadInput.files[0]; if(f){ addSticker(await resizeImage(f, 320, 0.9)); }
+  stickerUploadInput.value = '';
+});
 
 // 组装系统提示：人设 + 记忆 + 分条风格
 function buildSystem(){
   let s = (persona || '').trim();
   if(memory && memory.trim()) s += (s ? '\n\n' : '') + '【长期记忆】\n' + memory.trim();
   if(splitMode) s += (s ? '\n\n' : '') + '【消息风格】像真人聊天那样，把回复拆成 2~4 条简短的消息，一条一条发。每条之间用 ' + SPLIT_TOKEN + ' 或空行分隔。';
+  if(stickers.length){
+    s += (s ? '\n\n' : '') + '【表情包】你可以发送表情包，让聊天更生动。可用表情包 URL：\n'
+      + stickers.map(u => '- ' + u).join('\n')
+      + '\n想发表情包时，单独占一条消息输出 [[sticker:URL]]（URL 必须是上面列表里的原样地址）。适度使用，不要每句都发。';
+  }
   return s || '你是一个温柔友好的聊天助手，用中文自然地回复。';
 }
 // 分条：按 <split> 或空行拆成多段
@@ -1156,23 +1339,11 @@ async function streamAI(userContent, onDelta, onReason){
   return { content: full, reasoning: reason };
 }
 
-async function send(){
-  const text = inputEl.value.trim();
-  const images = pendingImages.slice();
-  if((!text && images.length === 0) || typing) return;
-  pendingImages = []; renderStrip();
-  addUserMessage(text, images);
-  inputEl.value = ''; inputEl.style.height = 'auto';
+// 调用 API 并渲染 AI 回复（含表情包）
+async function respond(userContent){
   typing = true; sendEl.disabled = true; showTyping();
-
   const configured = apiCfg.baseUrl && apiCfg.apiKey && apiCfg.model;
   if(configured){
-    // 含图片时用数组内容（视觉模型可识别）
-    const userContent = images.length
-      ? [ ...(text ? [{ type:'text', text }] : []), ...images.map(u => ({ type:'image_url', image_url:{ url:u } })) ]
-      : text;
-    history.push({ role:'user', content: text || '[图片]' });
-
     const bubbles = [];
     const put = (i, t) => {
       if(!bubbles[i]){ if(t === '') return; if(i === 0) hideTyping(); bubbles[i] = addBubble('left', ''); }
@@ -1181,16 +1352,22 @@ async function send(){
     const onDelta = splitMode
       ? (full) => { splitSegs(full).forEach((seg, i) => put(i, seg)); scrollDown(); }
       : (full) => { put(0, full); scrollDown(); };
-
     try {
       const { content, reasoning } = await streamAI(userContent, onDelta);
       hideTyping();
-      const segs = splitSegs(content);
-      if(segs.length === 0) segs.push('（空回复）');
-      segs.forEach((seg, i) => put(i, seg));
-      for(let i = segs.length; i < bubbles.length; i++) bubbles[i]?.closest('.row')?.remove();
-      bubbles.length = segs.length;
-      if(bubbles[0]) attachReasoning(bubbles[0], reasoning);
+      const segs = splitSegs(content); if(segs.length === 0) segs.push('（空回复）');
+      if(/\[\[sticker:/.test(content)){
+        // 含表情包：清掉流式文字气泡，按段重渲染（文字/表情）
+        bubbles.forEach(b => b.closest('.row')?.remove());
+        let first = null;
+        segs.forEach((seg, i) => { const el = addAiSeg(seg); if(i === 0) first = el; });
+        if(first) attachReasoning(first, reasoning);
+      } else {
+        segs.forEach((seg, i) => put(i, seg));
+        for(let i = segs.length; i < bubbles.length; i++) bubbles[i]?.closest('.row')?.remove();
+        bubbles.length = segs.length;
+        if(bubbles[0]) attachReasoning(bubbles[0], reasoning);
+      }
       history.push({ role:'assistant', content: splitMode ? segs.join(SPLIT_TOKEN) : content, reasoning });
       saveHistory();
     } catch(err){
@@ -1206,6 +1383,37 @@ async function send(){
     else addBubble('left', FAKE_REPLIES[Math.floor(Math.random()*FAKE_REPLIES.length)]);
   }
   typing = false; sendEl.disabled = false; inputEl.focus();
+}
+
+async function send(){
+  const text = inputEl.value.trim();
+  const images = pendingImages.slice();
+  const files = pendingFiles.slice();
+  if((!text && !images.length && !files.length) || typing) return;
+  pendingImages = []; pendingFiles = []; renderStrip(); closePanels();
+  addUserMessage(text, images, files);
+  inputEl.value = ''; inputEl.style.height = 'auto';
+  // 发给模型的文本（含文件内容）
+  let apiText = text;
+  files.forEach(f => {
+    apiText += (apiText ? '\n\n' : '') + (f.text != null
+      ? '【文件 ' + f.name + '】\n' + f.text
+      : '【用户发送了文件：' + f.name + '（二进制，无法读取内容）】');
+  });
+  const userContent = images.length
+    ? [ ...(apiText ? [{ type:'text', text: apiText }] : []), ...images.map(u => ({ type:'image_url', image_url:{ url:u } })) ]
+    : apiText;
+  const histText = text || (images.length ? '[图片]' : files.length ? '[文件]' : '');
+  history.push({ role:'user', content: histText });
+  await respond(userContent);
+}
+
+async function sendSticker(url){
+  if(typing) return;
+  closePanels();
+  addUserSticker(url);
+  history.push({ role:'user', content: '[[sticker:' + url + ']]' });
+  await respond([{ type:'image_url', image_url:{ url } }]);
 }
 sendEl.addEventListener('click', send);
 inputEl.addEventListener('keydown', e => { if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); } });
