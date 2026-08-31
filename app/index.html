@@ -550,7 +550,7 @@ precision highp float;
 uniform vec2 uRes; uniform sampler2D uTex; uniform int uCount;
 uniform vec4 uRect[${MAX}]; uniform vec2 uMeta[${MAX}];
 uniform vec2 uLight;
-uniform float uStrength, uEdge, uChroma, uGlow, uRimPow, uTint, uBlur;
+uniform float uStrength, uEdge, uChroma, uGlow, uRimPow, uTint, uBlur, uBlurN;
 uniform vec3 uColAI, uColUser, uColNeutral;
 float sdRound(vec2 p, vec2 c, vec2 hw, float r){
   vec2 q = abs(p-c) - hw + r;
@@ -566,14 +566,19 @@ float scene(vec2 p, out float side){
 }
 float sceneD(vec2 p){ float s; return scene(p,s); }
 vec3 bg(vec2 p){ return texture2D(uTex, vec2(p.x/uRes.x, p.y/uRes.y)).rgb; }
-// 玻璃磨砂：对背景做小范围多点模糊
+// 磨砂散射：对背景做双环多点采样，把高频条纹散射成柔和低频明暗
 vec3 bgB(vec2 p, float rad){
   vec3 s = bg(p);
   if(rad > 0.5){
+    // 内环
     s += bg(p+vec2(rad,0.0)) + bg(p+vec2(-rad,0.0)) + bg(p+vec2(0.0,rad)) + bg(p+vec2(0.0,-rad));
     float r2 = rad * 0.7071;
     s += bg(p+vec2(r2,r2)) + bg(p+vec2(-r2,r2)) + bg(p+vec2(r2,-r2)) + bg(p+vec2(-r2,-r2));
-    s /= 9.0;
+    // 外环(更大半径，散射更均匀)
+    float ro = rad * 1.7, ru = ro * 0.7071;
+    s += bg(p+vec2(ro,0.0)) + bg(p+vec2(-ro,0.0)) + bg(p+vec2(0.0,ro)) + bg(p+vec2(0.0,-ro));
+    s += bg(p+vec2(ru,ru)) + bg(p+vec2(-ru,ru)) + bg(p+vec2(ru,-ru)) + bg(p+vec2(-ru,-ru));
+    s /= 17.0;
   }
   return s;
 }
@@ -589,10 +594,12 @@ void main(){
     float rim = 1.0 - smoothstep(0.0, uEdge, -d);
     rim = pow(rim, uRimPow);
     vec2 off = g * uStrength * rim;
+    // 输入框/顶栏(neutral)磨砂更高、内部更均匀；气泡折射优先
+    float blur = (side > 1.5) ? uBlurN : uBlur;
     vec3 refr;
-    refr.r = bgB(p + off*(1.0+uChroma), uBlur).r;
-    refr.g = bgB(p + off, uBlur).g;
-    refr.b = bgB(p + off*(1.0-uChroma), uBlur).b;
+    refr.r = bgB(p + off*(1.0+uChroma), blur).r;
+    refr.g = bgB(p + off, blur).g;
+    refr.b = bgB(p + off*(1.0-uChroma), blur).b;
     vec3 tint = uColNeutral;
     if(side < 0.5) tint = uColAI;
     else if(side < 1.5) tint = uColUser;
@@ -655,7 +662,7 @@ function initGL(){
   const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
   const a = gl.getAttribLocation(prog, 'a'); gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a,2,gl.FLOAT,false,0,0);
-  ['uRes','uTex','uCount','uLight','uStrength','uEdge','uChroma','uGlow','uRimPow','uTint','uBlur','uColAI','uColUser','uColNeutral']
+  ['uRes','uTex','uCount','uLight','uStrength','uEdge','uChroma','uGlow','uRimPow','uTint','uBlur','uBlurN','uColAI','uColUser','uColNeutral']
     .forEach(n => loc[n] = gl.getUniformLocation(prog, n));
   loc.uRect = gl.getUniformLocation(prog, 'uRect[0]');
   loc.uMeta = gl.getUniformLocation(prog, 'uMeta[0]');
@@ -733,10 +740,11 @@ function frame(){
     if(n >= MAX) return;
     const r = el.getBoundingClientRect(); if(r.width < 2 || r.height < 2) return;
     if(r.bottom < pr.top - 4 || r.top > pr.bottom + 4) return; // 只画可视区内的玻璃，避免超出上限
-    const cx = (r.left-pr.left + r.width/2)*dpr, cy = (r.top-pr.top + r.height/2)*dpr;
-    const hw = r.width/2*dpr, hh = r.height/2*dpr;
+    // 取整到整数设备像素：消除滚动时的亚像素抖动(玻璃边缘/高光"呼吸")
+    const cx = Math.round((r.left-pr.left + r.width/2)*dpr), cy = Math.round((r.top-pr.top + r.height/2)*dpr);
+    const hw = Math.round(r.width/2*dpr), hh = Math.round(r.height/2*dpr);
     let rad = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 20;
-    rad = Math.min(rad*dpr, hw, hh);
+    rad = Math.round(Math.min(rad*dpr, hw, hh));
     rects[n*4]=cx; rects[n*4+1]=cy; rects[n*4+2]=hw; rects[n*4+3]=hh;
     metas[n*2]=rad; metas[n*2+1] = colorId(el); n++;
   });
@@ -749,7 +757,9 @@ function frame(){
   gl.uniform1f(loc.uGlow, params.glow);
   gl.uniform1f(loc.uRimPow, params.rimPow);
   gl.uniform1f(loc.uTint, params.tint);
-  gl.uniform1f(loc.uBlur, params.glassBlur * dpr);
+  // 磨砂散射基线：气泡至少 2px(柔化高频条纹但保留折射)，输入框/顶栏更高(至少 5px，更均匀)
+  gl.uniform1f(loc.uBlur, Math.max(params.glassBlur, 2) * dpr);
+  gl.uniform1f(loc.uBlurN, Math.max(params.glassBlur + 3, 5.5) * dpr);
   gl.uniform3fv(loc.uColAI, colAIv);
   gl.uniform3fv(loc.uColUser, colUserv);
   gl.uniform3fv(loc.uColNeutral, colNeutralv);
