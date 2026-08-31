@@ -117,6 +117,21 @@
     text-shadow: 0 1px 2px rgba(0,0,0,0.28);
   }
 
+  .message span strong { font-weight: 700; }
+  .message span em { font-style: italic; }
+  .message span del { opacity: 0.6; }
+  .message span a { color: #cfe0ff; text-decoration: underline; }
+  .message span code {
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-size: 0.88em; padding: 1px 5px; border-radius: 6px;
+    background: rgba(255,255,255,0.16);
+  }
+  .message span pre {
+    margin: 4px 0 0; padding: 8px 10px; border-radius: 10px;
+    background: rgba(0,0,0,0.28); overflow-x: auto; white-space: pre;
+  }
+  .message span pre code { background: none; padding: 0; font-size: 0.86em; }
+
   .typing { display: flex; gap: 5px; }
   .typing i {
     width: 8px; height: 8px; border-radius: 999px; background: rgba(255,255,255,0.9);
@@ -1086,6 +1101,23 @@ function makeAvatar(side){
   a.innerHTML = avatarHTML(side);
   return a;
 }
+// 轻量 Markdown（只给 AI 那边用）：**粗** *斜* ~~删~~ `代码` [文字](链接) # 标题
+function mdInline(t){
+  const store = [];
+  const stash = h => { store.push(h); return ' ' + (store.length - 1) + ' '; };
+  let s = String(t == null ? '' : t).replace(/[&<>]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c]));
+  s = s.replace(/```([\s\S]*?)```/g, (m, x) => stash('<pre><code>' + x.replace(/^\n/, '') + '</code></pre>'));
+  s = s.replace(/`([^`\n]+)`/g, (m, x) => stash('<code>' + x + '</code>'));
+  s = s.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (m, txt, url) => stash('<a href="' + url + '" target="_blank" rel="noopener">' + txt + '</a>'));
+  s = s.replace(/^(#{1,4})\s+(.+)$/gm, (m, h, x) => '<strong>' + x + '</strong>');
+  s = s.replace(/\*\*([^\n]+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/__([^\n]+?)__/g, '<strong>$1</strong>');
+  s = s.replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>');
+  s = s.replace(/(^|[^\w])_([^_\n]+?)_(?![\w])/g, '$1<em>$2</em>');
+  s = s.replace(/~~([^\n]+?)~~/g, '<del>$1</del>');
+  s = s.replace(/\n/g, '<br>');
+  return s.replace(/ (\d+) /g, (m, i) => store[+i]);
+}
 function makeBubble(side, inner){
   const msg = document.createElement('div');
   msg.className = 'message glass ' + side; msg.dataset.side = side;
@@ -1100,7 +1132,8 @@ function alignRow(row, span){
 }
 function addBubble(side, text){
   const row = document.createElement('div'); row.className = 'row ' + side;
-  const span = document.createElement('span'); span.textContent = text;
+  const span = document.createElement('span');
+  if(side === 'left') span.innerHTML = mdInline(text); else span.textContent = text;
   const bubble = makeBubble(side, span);
   if(side === 'right') { row.append(bubble, makeAvatar('right')); }
   else { row.append(makeAvatar('left'), bubble); }
@@ -1172,7 +1205,7 @@ function addAiSeg(seg){
     row.append(avatar, im); messagesEl.append(row); scrollDown();
     return im;
   }
-  const span = document.createElement('span'); span.textContent = seg;
+  const span = document.createElement('span'); span.innerHTML = mdInline(seg);
   row.append(avatar, makeBubble('left', span)); messagesEl.append(row);
   requestAnimationFrame(() => alignRow(row, span)); scrollDown();
   return span;
@@ -1358,7 +1391,7 @@ async function respond(userContent){
     const bubbles = [];
     const put = (i, t) => {
       if(!bubbles[i]){ if(t === '') return; if(i === 0) hideTyping(); bubbles[i] = addBubble('left', ''); }
-      if(bubbles[i]){ bubbles[i].textContent = t; realign(bubbles[i]); }
+      if(bubbles[i]){ bubbles[i].innerHTML = mdInline(t); realign(bubbles[i]); }
     };
     const onDelta = splitMode
       ? (full) => { splitSegs(full).forEach((seg, i) => put(i, seg)); scrollDown(); }
