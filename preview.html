@@ -82,9 +82,9 @@
     flex: 1; overflow-y: auto;
     padding: 8px 14px 6px;
     display: flex; flex-direction: column; gap: 14px;
-    /* 顶部渐隐：滚上去的消息平滑淡出，而不是被"一刀切" */
-    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 34px);
-    mask-image: linear-gradient(to bottom, transparent 0, #000 34px);
+    /* 顶部/底部渐隐：滚动时消息在两端平滑淡出，而不是被"一刀切" */
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 34px, #000 calc(100% - 20px), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 34px, #000 calc(100% - 20px), transparent 100%);
   }
   .messages::-webkit-scrollbar { width: 0; }
 
@@ -135,11 +135,11 @@
   /* + 展开功能面板（微信风） */
   .fn-panel {
     display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
-    padding: 14px; margin-bottom: 8px; border-radius: 20px;
+    padding: 16px 14px; margin-top: 8px; border-radius: 20px;
     background: rgba(24,30,38,0.72);
     border: 1px solid rgba(255,255,255,0.14);
     backdrop-filter: blur(24px) saturate(140%); -webkit-backdrop-filter: blur(24px) saturate(140%);
-    animation: fadeUp 0.18s ease-out;
+    animation: sheetUp 0.24s cubic-bezier(0.2,0.8,0.2,1);
   }
   .fn-panel[hidden] { display: none; }
   .fn-tile {
@@ -155,11 +155,11 @@
 
   /* 表情包面板 */
   .sticker-panel {
-    padding: 12px; margin-bottom: 8px; border-radius: 20px;
+    padding: 12px; margin-top: 8px; border-radius: 20px;
     background: rgba(24,30,38,0.72);
     border: 1px solid rgba(255,255,255,0.14);
     backdrop-filter: blur(24px) saturate(140%); -webkit-backdrop-filter: blur(24px) saturate(140%);
-    animation: fadeUp 0.18s ease-out;
+    animation: sheetUp 0.24s cubic-bezier(0.2,0.8,0.2,1);
   }
   .sticker-panel[hidden] { display: none; }
   .sticker-grid {
@@ -367,7 +367,16 @@
   <div class="messages" id="messages"></div>
 
   <div class="composer">
-    <!-- + 展开功能面板 -->
+    <div class="attach-strip" id="attach-strip" hidden></div>
+    <div class="glass inputbar" data-side="left" data-color="neutral">
+      <button class="icon-btn" id="plus-btn" aria-label="更多">＋</button>
+      <textarea id="input" rows="1" placeholder="Type a message..."></textarea>
+      <button class="send" id="send" aria-label="发送">
+        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+      </button>
+    </div>
+
+    <!-- + 展开功能面板（在输入框下面，从下往上弹）-->
     <div class="fn-panel" id="plus-panel" hidden>
       <button class="fn-tile" id="fn-photo">
         <span class="fn-ic"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M4 17l4.5-4.5 4 4L16 12l4 5"/></svg></span>图片
@@ -380,7 +389,7 @@
       </button>
     </div>
 
-    <!-- 表情包面板 -->
+    <!-- 表情包面板（同样在输入框下面）-->
     <div class="sticker-panel" id="sticker-panel" hidden>
       <div class="sticker-grid" id="sticker-grid"></div>
       <div class="sticker-add">
@@ -388,15 +397,6 @@
         <button class="btn small" id="sticker-url-add">添加</button>
         <button class="btn small" id="sticker-upload">上传</button>
       </div>
-    </div>
-
-    <div class="attach-strip" id="attach-strip" hidden></div>
-    <div class="glass inputbar" data-side="left" data-color="neutral">
-      <button class="icon-btn" id="plus-btn" aria-label="更多">＋</button>
-      <textarea id="input" rows="1" placeholder="Type a message..."></textarea>
-      <button class="send" id="send" aria-label="发送">
-        <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-      </button>
     </div>
   </div>
 
