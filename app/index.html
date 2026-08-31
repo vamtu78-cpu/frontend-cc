@@ -1166,7 +1166,8 @@ function addUserMessage(text, images, files){
   scrollDown();
 }
 // 用户发送的表情包（无气泡透明底）
-function addUserSticker(url){
+function addUserSticker(idOrUrl){
+  const url = resolveSticker(idOrUrl);
   const row = document.createElement('div'); row.className = 'row right multiline';
   const im = document.createElement('img'); im.className = 'msg-sticker'; im.src = url;
   im.addEventListener('click', () => openLightbox(url));
@@ -1179,8 +1180,9 @@ function addAiSeg(seg){
   const row = document.createElement('div'); row.className = 'row left'; const avatar = makeAvatar('left');
   if(m){
     row.classList.add('multiline');
-    const im = document.createElement('img'); im.className = 'msg-sticker'; im.src = m[1];
-    im.addEventListener('click', () => openLightbox(m[1]));
+    const surl = resolveSticker(m[1]);
+    const im = document.createElement('img'); im.className = 'msg-sticker'; im.src = surl;
+    im.addEventListener('click', () => openLightbox(surl));
     row.append(avatar, im); messagesEl.append(row); scrollDown();
     return im;
   }
@@ -1218,9 +1220,17 @@ const attachStrip = document.getElementById('attach-strip');
 
 // 表情包库（url 数组）
 let stickers = [];
-try { stickers = JSON.parse(localStorage.getItem('lg-stickers') || '[]') || []; } catch(e){}
+try {
+  const raw = JSON.parse(localStorage.getItem('lg-stickers') || '[]') || [];
+  // 迁移：旧版是 url 字符串数组 → {id,url,name}
+  stickers = raw.map(s => typeof s === 'string' ? { id: sidGen(), url: s, name: nameFromUrl(s) } : s);
+} catch(e){}
 const saveStickers = () => { try { localStorage.setItem('lg-stickers', JSON.stringify(stickers)); } catch(e){} };
 const STICKER_RE = /^\[\[sticker:\s*([^\]]+?)\s*\]\]$/;
+function sidGen(){ return 's' + Math.random().toString(36).slice(2, 7); }
+function nameFromUrl(u){ if(/^data:/.test(u)) return '表情'; const m = String(u).split('?')[0].split('/').pop() || ''; return (m.replace(/\.[a-z0-9]+$/i, '') || '表情').slice(0, 16); }
+// 把 token 里的 id 或 URL 解析成真实图片地址
+function resolveSticker(idOrUrl){ const s = stickers.find(x => x.id === idOrUrl); return s ? s.url : idOrUrl; }
 function renderStrip(){
   attachStrip.innerHTML = '';
   attachStrip.hidden = pendingImages.length === 0 && pendingFiles.length === 0;
@@ -1276,23 +1286,24 @@ fileInput.addEventListener('change', () => { addAnyFiles(Array.from(fileInput.fi
 function renderStickerGrid(){
   const grid = document.getElementById('sticker-grid'); grid.innerHTML = '';
   if(!stickers.length){ const e = document.createElement('div'); e.className = 'sticker-empty'; e.textContent = '还没有表情包，用下面上传或粘贴 URL 添加'; grid.append(e); return; }
-  stickers.forEach((url, i) => {
+  stickers.forEach((s) => {
     const it = document.createElement('div'); it.className = 'sticker-item';
-    const im = document.createElement('img'); im.src = url;
-    it.addEventListener('click', () => sendSticker(url));
+    const im = document.createElement('img'); im.src = s.url;
+    it.addEventListener('click', () => sendSticker(s));
     const del = document.createElement('button'); del.className = 'sd'; del.textContent = '✕';
-    del.addEventListener('click', (e) => { e.stopPropagation(); stickers.splice(i, 1); saveStickers(); renderStickerGrid(); });
+    del.addEventListener('click', (e) => { e.stopPropagation(); stickers = stickers.filter(x => x.id !== s.id); saveStickers(); renderStickerGrid(); });
     it.append(im, del); grid.append(it);
   });
 }
-function addSticker(url){ if(!url) return; stickers.push(url); saveStickers(); renderStickerGrid(); }
+function addSticker(url, name){ if(!url) return; stickers.push({ id: sidGen(), url, name: name || nameFromUrl(url) }); saveStickers(); renderStickerGrid(); }
 document.getElementById('sticker-url-add').addEventListener('click', () => {
   const inp = document.getElementById('sticker-url'); const u = inp.value.trim();
   if(u){ addSticker(u); inp.value = ''; }
 });
 document.getElementById('sticker-upload').addEventListener('click', () => stickerUploadInput.click());
 stickerUploadInput.addEventListener('change', async () => {
-  const f = stickerUploadInput.files && stickerUploadInput.files[0]; if(f){ addSticker(await resizeImage(f, 320, 0.9)); }
+  const f = stickerUploadInput.files && stickerUploadInput.files[0];
+  if(f){ addSticker(await resizeImage(f, 320, 0.9), (f.name || '').replace(/\.[a-z0-9]+$/i, '').slice(0, 16)); }
   stickerUploadInput.value = '';
 });
 
@@ -1302,9 +1313,9 @@ function buildSystem(){
   if(memory && memory.trim()) s += (s ? '\n\n' : '') + '【长期记忆】\n' + memory.trim();
   if(splitMode) s += (s ? '\n\n' : '') + '【消息风格】像真人聊天那样，把回复拆成 2~4 条简短的消息，一条一条发。每条之间用 ' + SPLIT_TOKEN + ' 或空行分隔。';
   if(stickers.length){
-    s += (s ? '\n\n' : '') + '【表情包】你可以发送表情包，让聊天更生动。可用表情包 URL：\n'
-      + stickers.map(u => '- ' + u).join('\n')
-      + '\n想发表情包时，单独占一条消息输出 [[sticker:URL]]（URL 必须是上面列表里的原样地址）。适度使用，不要每句都发。';
+    s += (s ? '\n\n' : '') + '【表情包】你可以发送表情包，让聊天更生动。可用表情包（ID + 名称）：\n'
+      + stickers.map(x => '- ' + x.id + '（' + x.name + '）').join('\n')
+      + '\n想发表情包时，单独占一条消息输出 [[sticker:ID]]（ID 必须是上面列表里的，例如 [[sticker:' + stickers[0].id + ']]）。适度使用，不要每句都发。';
   }
   return s || '你是一个温柔友好的聊天助手，用中文自然地回复。';
 }
@@ -1422,11 +1433,13 @@ async function send(){
   await respond(userContent);
 }
 
-async function sendSticker(url){
+async function sendSticker(s){
   if(typing) return;
+  const url = typeof s === 'string' ? resolveSticker(s) : s.url;
+  const id  = typeof s === 'string' ? s : s.id;
   closePanels();
-  addUserSticker(url);
-  history.push({ role:'user', content: '[[sticker:' + url + ']]' });
+  addUserSticker(id);
+  history.push({ role:'user', content: '[[sticker:' + id + ']]' });
   await respond([{ type:'image_url', image_url:{ url } }]);
 }
 sendEl.addEventListener('click', send);
