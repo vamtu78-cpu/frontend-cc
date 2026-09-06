@@ -102,6 +102,7 @@
   .avatar-ai   { background: linear-gradient(135deg, #7c8ce0, #cf6bd6); }
   .avatar-user { background: linear-gradient(135deg, #56b6f4, #3b7bf0); }
 
+  /* 消息=内容层：安静的自适应半透明材质(Apple「Materials」，不是 Liquid Glass) */
   .message {
     position: relative;
     display: inline-flex; align-items: center;
@@ -109,13 +110,20 @@
     padding: var(--bub-pady) var(--bub-padx);
     border-radius: var(--bub-radius);
     font-size: var(--msg-font); line-height: 1.4;
+    backdrop-filter: blur(14px) saturate(1.5);
+    -webkit-backdrop-filter: blur(14px) saturate(1.5);
+    border: 1px solid rgba(255,255,255,0.10);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.14);
   }
+  .message.left  { background: var(--bub-ai-bg, rgba(28,33,41,0.52)); }
+  .message.right { background: var(--bub-user-bg, rgba(120,150,190,0.50)); }
   .message span {
     position: relative; z-index: 2;
     white-space: pre-wrap; word-break: break-word;
     color: rgba(255,255,255,0.96);
-    text-shadow: 0 1px 2px rgba(0,0,0,0.28);
   }
+  .message.left  span { color: var(--bub-ai-fg, rgba(255,255,255,0.96)); text-shadow: var(--bub-ai-sh, 0 1px 2px rgba(0,0,0,0.26)); }
+  .message.right span { color: var(--bub-user-fg, rgba(255,255,255,0.96)); text-shadow: var(--bub-user-sh, 0 1px 2px rgba(0,0,0,0.26)); }
 
   .message span strong { font-weight: 700; }
   .message span em { font-style: italic; }
@@ -755,6 +763,25 @@ function hexToVec(h){
 }
 let colAIv = hexToVec(colors.ai), colUserv = hexToVec(colors.user);
 const colNeutralv = hexToVec('#2a323d');
+// 内容气泡：由配色生成自适应的半透明底色 + 明暗自适应文字(Apple regular 变体思路)
+function bubbleMaterial(hex){
+  const v = hexToVec(hex);
+  const lum = 0.299*v[0] + 0.587*v[1] + 0.114*v[2];   // 0..1 感知亮度
+  const R = Math.round(v[0]*255), G = Math.round(v[1]*255), B = Math.round(v[2]*255);
+  const light = lum > 0.6;                              // 浅色底 → 深色字
+  return {
+    bg: 'rgba(' + R + ',' + G + ',' + B + ',0.52)',
+    fg: light ? 'rgba(18,20,26,0.92)' : 'rgba(255,255,255,0.96)',
+    sh: light ? 'none' : '0 1px 2px rgba(0,0,0,0.26)'
+  };
+}
+function applyBubbleColors(){
+  const a = bubbleMaterial(colors.ai), u = bubbleMaterial(colors.user);
+  const s = document.documentElement.style;
+  s.setProperty('--bub-ai-bg', a.bg);   s.setProperty('--bub-ai-fg', a.fg);   s.setProperty('--bub-ai-sh', a.sh);
+  s.setProperty('--bub-user-bg', u.bg); s.setProperty('--bub-user-fg', u.fg); s.setProperty('--bub-user-sh', u.sh);
+}
+applyBubbleColors();
 const colorId = el => { const c = el.dataset.color; return c === 'ai' ? 0.0 : c === 'user' ? 1.0 : 2.0; };
 
 function setBubbleVars(){
@@ -1102,8 +1129,8 @@ const saveColors = () => { try { localStorage.setItem('lg-colors', JSON.stringif
 const colAiInput = document.getElementById('col-ai');
 const colUserInput = document.getElementById('col-user');
 colAiInput.value = colors.ai; colUserInput.value = colors.user;
-colAiInput.addEventListener('input', (e) => { colors.ai = e.target.value; colAIv = hexToVec(colors.ai); saveColors(); });
-colUserInput.addEventListener('input', (e) => { colors.user = e.target.value; colUserv = hexToVec(colors.user); saveColors(); });
+colAiInput.addEventListener('input', (e) => { colors.ai = e.target.value; colAIv = hexToVec(colors.ai); applyBubbleColors(); saveColors(); });
+colUserInput.addEventListener('input', (e) => { colors.user = e.target.value; colUserv = hexToVec(colors.user); applyBubbleColors(); saveColors(); });
 
 /* ===== 聊天逻辑 ===== */
 const FAKE_REPLIES = [
@@ -1158,8 +1185,9 @@ function mdInline(t){
 }
 function makeBubble(side, inner){
   const msg = document.createElement('div');
-  msg.className = 'message glass ' + side; msg.dataset.side = side;
-  msg.dataset.color = side === 'right' ? 'user' : 'ai';
+  // 消息属于「内容层」——按 Apple HIG，内容层不用 Liquid Glass，
+  // 改用安静的自适应半透明材质(见 .message CSS)，玻璃只留给 UI/导航层
+  msg.className = 'message ' + side; msg.dataset.side = side;
   msg.append(inner); return msg;
 }
 // 单行居中，多行顶端对齐
