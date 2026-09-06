@@ -116,7 +116,6 @@
   .avatar-ai   { background: linear-gradient(135deg, #7c8ce0, #cf6bd6); }
   .avatar-user { background: linear-gradient(135deg, #56b6f4, #3b7bf0); }
 
-  /* 消息=内容层：安静的自适应半透明材质(Apple「Materials」，不是 Liquid Glass) */
   .message {
     position: relative;
     display: inline-flex; align-items: center;
@@ -124,20 +123,15 @@
     padding: var(--bub-pady) var(--bub-padx);
     border-radius: var(--bub-radius);
     font-size: var(--msg-font); line-height: 1.4;
-    backdrop-filter: blur(14px) saturate(1.5);
-    -webkit-backdrop-filter: blur(14px) saturate(1.5);
-    border: 1px solid rgba(255,255,255,0.10);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.14);
   }
-  .message.left  { background: var(--bub-ai-bg, rgba(28,33,41,0.52)); }
-  .message.right { background: var(--bub-user-bg, rgba(120,150,190,0.50)); }
+  /* 气泡的玻璃边完全交给着色器的方向性边缘，去掉 CSS 那圈均匀白描边 */
+  .message.glass { border: none; box-shadow: none; }
   .message span {
     position: relative; z-index: 2;
     white-space: pre-wrap; word-break: break-word;
     color: rgba(255,255,255,0.96);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.30);
   }
-  .message.left  span { color: var(--bub-ai-fg, rgba(255,255,255,0.96)); text-shadow: var(--bub-ai-sh, 0 1px 2px rgba(0,0,0,0.26)); }
-  .message.right span { color: var(--bub-user-fg, rgba(255,255,255,0.96)); text-shadow: var(--bub-user-sh, 0 1px 2px rgba(0,0,0,0.26)); }
 
   .message span strong { font-weight: 700; }
   .message span em { font-style: italic; }
@@ -589,7 +583,7 @@
       <div class="sec">
         <div class="sec-head"><span>玻璃调节</span><button class="btn small" id="panel-reset">重置</button></div>
         <label>折射强度 <output id="v-strength"></output><input type="range" id="r-strength" min="0" max="120" step="1"></label>
-        <label>透镜范围 <output id="v-edge"></output><input type="range" id="r-edge" min="8" max="100" step="1"></label>
+        <label>玻璃厚度 <output id="v-edge"></output><input type="range" id="r-edge" min="8" max="80" step="1"></label>
         <label>折射衰减 <output id="v-rimPow"></output><input type="range" id="r-rimPow" min="0.6" max="4" step="0.1"></label>
         <label>色散彩边 <output id="v-chroma"></output><input type="range" id="r-chroma" min="0" max="0.8" step="0.01"></label>
         <label>乳白浓度 <output id="v-milk"></output><input type="range" id="r-milk" min="0" max="0.5" step="0.01"></label>
@@ -703,21 +697,26 @@ void main(){
     vec2 lp = (p - rct.xy) / hf;                      // 气泡内归一化坐标 [-1,1]
     vec2 Ldir = normalize(vec2(-0.55, -0.83));        // 光来自左上
 
-    // ① 宽域透镜折射：整颗气泡像凸透镜，从边缘平滑铺到内部
+    // ① 透镜折射：uEdge 是固定物理厚度(px)，所以材质随气泡大小而变——
+    //    小气泡(md<厚度)通体折射像凸透镜；大气泡中间平、只有边缘弯光。
+    float md = min(hf.x, hf.y);                       // 气泡最短半边(设备像素)
     float t = clamp(dIn / max(uEdge, 1.0), 0.0, 1.0);
     float lens = pow(1.0 - t, uRimPow);
-    vec2 off = g * uStrength * lens;
-    // ② 磨砂降低：背景仍可辨认，柔和感交给乳白基底而非糊成一片
+    // 尺寸相关强度：小气泡折射更狠(更凸)，大气泡更收敛
+    float sizeMul = clamp(46.0 / (md + 1.0), 0.55, 1.9);
+    vec2 off = g * uStrength * lens * sizeMul;
+    // ② 磨砂：气泡低(背景水纹要能透出来被弯)，输入框/顶栏(neutral)高一点保证可读
     float blur = (side > 1.5) ? uBlurN : uBlur;
-    blur *= (1.0 + lens * 0.8);
+    blur *= (1.0 + lens * 0.6);
     vec3 refr;
     refr.r = bgB(p + off*(1.0+uChroma), blur).r;
     refr.g = bgB(p + off, blur).g;
     refr.b = bgB(p + off*(1.0-uChroma), blur).b;
 
-    // ③ 乳白半透明基底：给玻璃"厚度/材质"，不是纯白也不是全透
+    // ③ 极轻乳白基底：气泡几乎全透(靠折射立材质)，只有 UI 层给一点磨砂保证可读
+    float milkAmt = (side > 1.5) ? uMilk : uMilk * 0.28;
     vec3 milk = vec3(0.86, 0.89, 0.95);
-    vec3 glass = mix(refr, milk, uMilk);
+    vec3 glass = mix(refr, milk, milkAmt);
     // 颜色染色(跟随气泡配色)叠一层薄的
     vec3 tint = uColNeutral;
     if(side < 0.5) tint = uColAI;
@@ -748,10 +747,10 @@ const canvas = document.getElementById('gl');
 let gl, prog, loc = {}, tex, dpr = Math.min(devicePixelRatio || 1, 2);
 let light = [0.0, -1.0];
 
-const DEFAULTS = { strength:20, edge:46, rimPow:1.5, chroma:0.24, glow:0.42, tint:0.04, glassBlur:0,
-                   milk:0.16, vol:0.16,
+const DEFAULTS = { strength:26, edge:24, rimPow:1.5, chroma:0.30, glow:0.40, tint:0.05, glassBlur:0,
+                   milk:0.13, vol:0.10,
                    scale:1, bubRadius:23, bubPadX:20, bubPadY:9, bubMaxW:72 };
-const PARAMS_V = 3;   // 材质升级：乳白基底+方向性边缘+体积光；glow 含义变为迎光强度 → 旧存档玻璃参数作废
+const PARAMS_V = 4;   // 气泡换回真折射玻璃 + 尺寸相关材质；透镜厚度调浅、乳白/体积光收掉 → 旧存档玻璃参数作废
 let params = Object.assign({}, DEFAULTS);
 try {
   const s = JSON.parse(localStorage.getItem('lg-params') || 'null');
@@ -777,25 +776,6 @@ function hexToVec(h){
 }
 let colAIv = hexToVec(colors.ai), colUserv = hexToVec(colors.user);
 const colNeutralv = hexToVec('#2a323d');
-// 内容气泡：由配色生成自适应的半透明底色 + 明暗自适应文字(Apple regular 变体思路)
-function bubbleMaterial(hex){
-  const v = hexToVec(hex);
-  const lum = 0.299*v[0] + 0.587*v[1] + 0.114*v[2];   // 0..1 感知亮度
-  const R = Math.round(v[0]*255), G = Math.round(v[1]*255), B = Math.round(v[2]*255);
-  const light = lum > 0.6;                              // 浅色底 → 深色字
-  return {
-    bg: 'rgba(' + R + ',' + G + ',' + B + ',0.52)',
-    fg: light ? 'rgba(18,20,26,0.92)' : 'rgba(255,255,255,0.96)',
-    sh: light ? 'none' : '0 1px 2px rgba(0,0,0,0.26)'
-  };
-}
-function applyBubbleColors(){
-  const a = bubbleMaterial(colors.ai), u = bubbleMaterial(colors.user);
-  const s = document.documentElement.style;
-  s.setProperty('--bub-ai-bg', a.bg);   s.setProperty('--bub-ai-fg', a.fg);   s.setProperty('--bub-ai-sh', a.sh);
-  s.setProperty('--bub-user-bg', u.bg); s.setProperty('--bub-user-fg', u.fg); s.setProperty('--bub-user-sh', u.sh);
-}
-applyBubbleColors();
 const colorId = el => { const c = el.dataset.color; return c === 'ai' ? 0.0 : c === 'user' ? 1.0 : 2.0; };
 
 function setBubbleVars(){
@@ -1143,8 +1123,8 @@ const saveColors = () => { try { localStorage.setItem('lg-colors', JSON.stringif
 const colAiInput = document.getElementById('col-ai');
 const colUserInput = document.getElementById('col-user');
 colAiInput.value = colors.ai; colUserInput.value = colors.user;
-colAiInput.addEventListener('input', (e) => { colors.ai = e.target.value; colAIv = hexToVec(colors.ai); applyBubbleColors(); saveColors(); });
-colUserInput.addEventListener('input', (e) => { colors.user = e.target.value; colUserv = hexToVec(colors.user); applyBubbleColors(); saveColors(); });
+colAiInput.addEventListener('input', (e) => { colors.ai = e.target.value; colAIv = hexToVec(colors.ai); saveColors(); });
+colUserInput.addEventListener('input', (e) => { colors.user = e.target.value; colUserv = hexToVec(colors.user); saveColors(); });
 
 /* ===== 聊天逻辑 ===== */
 const FAKE_REPLIES = [
@@ -1199,9 +1179,8 @@ function mdInline(t){
 }
 function makeBubble(side, inner){
   const msg = document.createElement('div');
-  // 消息属于「内容层」——按 Apple HIG，内容层不用 Liquid Glass，
-  // 改用安静的自适应半透明材质(见 .message CSS)，玻璃只留给 UI/导航层
-  msg.className = 'message ' + side; msg.dataset.side = side;
+  msg.className = 'message glass ' + side; msg.dataset.side = side;
+  msg.dataset.color = side === 'right' ? 'user' : 'ai';
   msg.append(inner); return msg;
 }
 // 单行居中，多行顶端对齐
