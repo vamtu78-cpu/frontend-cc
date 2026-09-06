@@ -581,8 +581,8 @@
       <div class="sec">
         <div class="sec-head"><span>玻璃调节</span><button class="btn small" id="panel-reset">重置</button></div>
         <label>折射强度 <output id="v-strength"></output><input type="range" id="r-strength" min="0" max="120" step="1"></label>
-        <label>折射宽度 <output id="v-edge"></output><input type="range" id="r-edge" min="2" max="48" step="1"></label>
-        <label>边缘锐度 <output id="v-rimPow"></output><input type="range" id="r-rimPow" min="1" max="5" step="0.1"></label>
+        <label>透镜范围 <output id="v-edge"></output><input type="range" id="r-edge" min="8" max="100" step="1"></label>
+        <label>折射衰减 <output id="v-rimPow"></output><input type="range" id="r-rimPow" min="0.6" max="4" step="0.1"></label>
         <label>色散彩边 <output id="v-chroma"></output><input type="range" id="r-chroma" min="0" max="0.8" step="0.01"></label>
         <label>边缘反光 <output id="v-glow"></output><input type="range" id="r-glow" min="0" max="0.6" step="0.01"></label>
         <label>玻璃染色 <output id="v-tint"></output><input type="range" id="r-tint" min="0" max="0.3" step="0.01"></label>
@@ -688,13 +688,14 @@ void main(){
     float e = 1.5;
     vec2 g = normalize(vec2(sceneD(p+vec2(e,0.))-sceneD(p-vec2(e,0.)),
                             sceneD(p+vec2(0.,e))-sceneD(p-vec2(0.,e))) + 1e-6);
-    float rim = 1.0 - smoothstep(0.0, uEdge, -d);
-    rim = pow(rim, uRimPow);
-    vec2 off = g * uStrength * rim;
+    float dIn = -d;                                  // 形状内部为正
+    // 宽域透镜：整颗气泡像一块凸透镜，折射从边缘平滑铺到内部，而不是只在细边
+    float t = clamp(dIn / max(uEdge, 1.0), 0.0, 1.0);// 0=边缘 → 1=深处
+    float lens = pow(1.0 - t, uRimPow);              // 边缘最强、向中心平滑衰减
+    vec2 off = g * uStrength * lens;
     // 输入框/顶栏(neutral)磨砂更高、内部更均匀；气泡折射优先
     float blur = (side > 1.5) ? uBlurN : uBlur;
-    // 关键：边缘(折射最强处)磨砂也最强，把高对比背景的折射"截断缝"揉化掉
-    blur *= (1.0 + rim * 2.2);
+    blur *= (1.0 + lens * 1.2);                      // 折射越强处磨砂略强，揉化"截断缝"
     vec3 refr;
     refr.r = bgB(p + off*(1.0+uChroma), blur).r;
     refr.g = bgB(p + off, blur).g;
@@ -704,9 +705,11 @@ void main(){
     else if(side < 1.5) tint = uColUser;
     float tintA = uTint;
     vec3 glass = mix(refr, tint, tintA);
-    glass += vec3(uGlow) * pow(rim, 2.5);
-    float spec = pow(max(dot(normalize(-g), normalize(uLight)),0.0), 24.0) * rim;
-    glass += vec3(1.0) * spec * 0.5;
+    // 细亮边：一条很窄(≈2px)的脆边高光，与折射带解耦，避免"肥皂泡"的胖光圈
+    float rimHi = pow(1.0 - smoothstep(0.0, 4.5, dIn), 1.6);
+    glass += vec3(uGlow) * rimHi;
+    float spec = pow(max(dot(normalize(-g), normalize(uLight)),0.0), 24.0) * rimHi;
+    glass += vec3(1.0) * spec * 0.35;
     col = mix(col, glass, alpha);
   }
   gl_FragColor = vec4(col, 1.0);
@@ -717,11 +720,23 @@ const canvas = document.getElementById('gl');
 let gl, prog, loc = {}, tex, dpr = Math.min(devicePixelRatio || 1, 2);
 let light = [0.0, -1.0];
 
-const DEFAULTS = { strength:48, edge:12, rimPow:2.4, chroma:0.32, glow:0.20, tint:0.06, glassBlur:0,
+const DEFAULTS = { strength:22, edge:46, rimPow:1.5, chroma:0.26, glow:0.13, tint:0.05, glassBlur:0,
                    scale:1, bubRadius:23, bubPadX:20, bubPadY:9, bubMaxW:72 };
+const PARAMS_V = 2;   // 玻璃着色器换成"透镜"方案，edge/rimPow 含义已变 → 旧存档的玻璃参数作废
 let params = Object.assign({}, DEFAULTS);
-try { const s = JSON.parse(localStorage.getItem('lg-params') || 'null'); if(s) params = Object.assign({}, DEFAULTS, s); } catch(e){}
-const saveParams = () => { try { localStorage.setItem('lg-params', JSON.stringify(params)); } catch(e){} };
+try {
+  const s = JSON.parse(localStorage.getItem('lg-params') || 'null');
+  if(s){
+    if(s.v === PARAMS_V){ params = Object.assign({}, DEFAULTS, s); }
+    else {
+      // 旧存档：保留气泡几何/缩放，玻璃折射参数用新默认，避免继续"泡泡感"
+      const keep = ['scale','bubRadius','bubPadX','bubPadY','bubMaxW','glassBlur'];
+      keep.forEach(k => { if(typeof s[k] === 'number') params[k] = s[k]; });
+    }
+  }
+} catch(e){}
+params.v = PARAMS_V;
+const saveParams = () => { try { localStorage.setItem('lg-params', JSON.stringify(Object.assign({ v: PARAMS_V }, params))); } catch(e){} };
 
 // 气泡颜色（AI 与胶囊同步；我的单独）
 const DEFCOL = { ai: '#2a323d', user: '#d9e5f2' };
