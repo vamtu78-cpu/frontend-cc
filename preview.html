@@ -655,19 +655,14 @@ float scene(vec2 p, out float side, out vec4 rct, out float rad){
 }
 float sceneD(vec2 p){ float s; vec4 rr; float rd; return scene(p,s,rr,rd); }
 vec3 bg(vec2 p){ return texture2D(uTex, vec2(p.x/uRes.x, p.y/uRes.y)).rgb; }
-// 磨砂散射：对背景做双环多点采样，把高频条纹散射成柔和低频明暗
+// 磨砂散射：单环 9 点轻采样(与 liquid-glass-lab 一致)，保持折射清脆不糊成一片
 vec3 bgB(vec2 p, float rad){
   vec3 s = bg(p);
   if(rad > 0.5){
-    // 内环
     s += bg(p+vec2(rad,0.0)) + bg(p+vec2(-rad,0.0)) + bg(p+vec2(0.0,rad)) + bg(p+vec2(0.0,-rad));
     float r2 = rad * 0.7071;
     s += bg(p+vec2(r2,r2)) + bg(p+vec2(-r2,r2)) + bg(p+vec2(r2,-r2)) + bg(p+vec2(-r2,-r2));
-    // 外环(更大半径，散射更均匀)
-    float ro = rad * 1.7, ru = ro * 0.7071;
-    s += bg(p+vec2(ro,0.0)) + bg(p+vec2(-ro,0.0)) + bg(p+vec2(0.0,ro)) + bg(p+vec2(0.0,-ro));
-    s += bg(p+vec2(ru,ru)) + bg(p+vec2(-ru,ru)) + bg(p+vec2(ru,-ru)) + bg(p+vec2(-ru,-ru));
-    s /= 17.0;
+    s /= 9.0;
   }
   return s;
 }
@@ -691,15 +686,11 @@ void main(){
     vec2 lp = (p - rct.xy) / hf;                      // 气泡内归一化坐标 [-1,1]
     vec2 Ldir = normalize(vec2(-0.55, -0.83));        // 光来自左上
 
-    // ① 透镜折射：uEdge 是固定物理厚度(px)，所以材质随气泡大小而变——
-    //    小气泡(md<厚度)通体折射像凸透镜；大气泡中间平、只有边缘弯光。
-    float md = min(hf.x, hf.y);                       // 气泡最短半边(设备像素)
+    // ① 透镜折射：uEdge 是固定物理厚度(px)，材质随气泡大小自然变化(与 lab 一致，无额外衰减)
     float t = clamp(dIn / max(uEdge, 1.0), 0.0, 1.0);
     float lens = pow(1.0 - t, uRimPow);
-    // 尺寸相关强度：小气泡折射更狠(更凸)，大气泡更收敛
-    float sizeMul = clamp(46.0 / (md + 1.0), 0.55, 1.9);
-    vec2 off = g * uStrength * lens * sizeMul;
-    // ② 磨砂：气泡低(背景水纹要能透出来被弯)，输入框/顶栏(neutral)高一点保证可读
+    vec2 off = g * uStrength * lens;
+    // ② 磨砂：气泡用 uBlur(可低至 0，保持清脆)，输入框/顶栏(neutral)高一点保证可读
     float blur = (side > 1.5) ? uBlurN : uBlur;
     blur *= (1.0 + lens * 0.6);
     vec3 refr;
@@ -902,8 +893,8 @@ function frame(){
   gl.uniform1f(loc.uVol, params.vol);
   gl.uniform1f(loc.uContrast, params.contrast);
   gl.uniform1f(loc.uShadow, params.shadow);
-  // 磨砂散射基线：气泡至少 2px(柔化高频条纹但保留折射)，输入框/顶栏更高(至少 5px，更均匀)
-  gl.uniform1f(loc.uBlur, Math.max(params.glassBlur, 2) * dpr);
+  // 气泡磨砂直接用 glassBlur(可低至 0 → 折射清脆，和 lab 一致)；输入框/顶栏保底更高保证可读
+  gl.uniform1f(loc.uBlur, params.glassBlur * dpr);
   gl.uniform1f(loc.uBlurN, Math.max(params.glassBlur + 3, 5.5) * dpr);
   gl.uniform3fv(loc.uColAI, colAIv);
   gl.uniform3fv(loc.uColUser, colUserv);
