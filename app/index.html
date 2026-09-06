@@ -584,7 +584,9 @@
         <label>透镜范围 <output id="v-edge"></output><input type="range" id="r-edge" min="8" max="100" step="1"></label>
         <label>折射衰减 <output id="v-rimPow"></output><input type="range" id="r-rimPow" min="0.6" max="4" step="0.1"></label>
         <label>色散彩边 <output id="v-chroma"></output><input type="range" id="r-chroma" min="0" max="0.8" step="0.01"></label>
-        <label>边缘反光 <output id="v-glow"></output><input type="range" id="r-glow" min="0" max="0.6" step="0.01"></label>
+        <label>乳白浓度 <output id="v-milk"></output><input type="range" id="r-milk" min="0" max="0.5" step="0.01"></label>
+        <label>体积光 <output id="v-vol"></output><input type="range" id="r-vol" min="0" max="0.5" step="0.01"></label>
+        <label>迎光边缘 <output id="v-glow"></output><input type="range" id="r-glow" min="0" max="0.9" step="0.01"></label>
         <label>玻璃染色 <output id="v-tint"></output><input type="range" id="r-tint" min="0" max="0.3" step="0.01"></label>
         <label>玻璃模糊 <output id="v-glassBlur"></output><input type="range" id="r-glassBlur" min="0" max="12" step="1"></label>
       </div>
@@ -647,21 +649,21 @@ precision highp float;
 uniform vec2 uRes; uniform sampler2D uTex; uniform int uCount;
 uniform vec4 uRect[${MAX}]; uniform vec2 uMeta[${MAX}];
 uniform vec2 uLight;
-uniform float uStrength, uEdge, uChroma, uGlow, uRimPow, uTint, uBlur, uBlurN;
+uniform float uStrength, uEdge, uChroma, uGlow, uRimPow, uTint, uBlur, uBlurN, uMilk, uVol;
 uniform vec3 uColAI, uColUser, uColNeutral;
 float sdRound(vec2 p, vec2 c, vec2 hw, float r){
   vec2 q = abs(p-c) - hw + r;
   return min(max(q.x,q.y),0.0) + length(max(q,0.0)) - r;
 }
-float scene(vec2 p, out float side){
-  float d = 1e9; side = 0.0;
+float scene(vec2 p, out float side, out vec4 rct, out float rad){
+  float d = 1e9; side = 0.0; rct = vec4(0.0); rad = 0.0;
   for(int i=0;i<${MAX};i++){ if(i>=uCount) break;
     vec4 R = uRect[i];
     float di = sdRound(p, R.xy, R.zw, uMeta[i].x);
-    if(di < d){ d = di; side = uMeta[i].y; } }
+    if(di < d){ d = di; side = uMeta[i].y; rct = R; rad = uMeta[i].x; } }
   return d;
 }
-float sceneD(vec2 p){ float s; return scene(p,s); }
+float sceneD(vec2 p){ float s; vec4 rr; float rd; return scene(p,s,rr,rd); }
 vec3 bg(vec2 p){ return texture2D(uTex, vec2(p.x/uRes.x, p.y/uRes.y)).rgb; }
 // 磨砂散射：对背景做双环多点采样，把高频条纹散射成柔和低频明暗
 vec3 bgB(vec2 p, float rad){
@@ -681,7 +683,7 @@ vec3 bgB(vec2 p, float rad){
 }
 void main(){
   vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
-  float side; float d = scene(p, side);
+  float side; vec4 rct; float rad; float d = scene(p, side, rct, rad);
   vec3 col = bg(p);
   float alpha = smoothstep(1.6, -1.6, d);
   if(alpha > 0.001){
@@ -689,27 +691,45 @@ void main(){
     vec2 g = normalize(vec2(sceneD(p+vec2(e,0.))-sceneD(p-vec2(e,0.)),
                             sceneD(p+vec2(0.,e))-sceneD(p-vec2(0.,e))) + 1e-6);
     float dIn = -d;                                  // 形状内部为正
-    // 宽域透镜：整颗气泡像一块凸透镜，折射从边缘平滑铺到内部，而不是只在细边
-    float t = clamp(dIn / max(uEdge, 1.0), 0.0, 1.0);// 0=边缘 → 1=深处
-    float lens = pow(1.0 - t, uRimPow);              // 边缘最强、向中心平滑衰减
+    vec2 hf = max(rct.zw, vec2(1.0));
+    vec2 lp = (p - rct.xy) / hf;                      // 气泡内归一化坐标 [-1,1]
+    vec2 Ldir = normalize(vec2(-0.55, -0.83));        // 光来自左上
+
+    // ① 宽域透镜折射：整颗气泡像凸透镜，从边缘平滑铺到内部
+    float t = clamp(dIn / max(uEdge, 1.0), 0.0, 1.0);
+    float lens = pow(1.0 - t, uRimPow);
     vec2 off = g * uStrength * lens;
-    // 输入框/顶栏(neutral)磨砂更高、内部更均匀；气泡折射优先
+    // ② 磨砂降低：背景仍可辨认，柔和感交给乳白基底而非糊成一片
     float blur = (side > 1.5) ? uBlurN : uBlur;
-    blur *= (1.0 + lens * 1.2);                      // 折射越强处磨砂略强，揉化"截断缝"
+    blur *= (1.0 + lens * 0.8);
     vec3 refr;
     refr.r = bgB(p + off*(1.0+uChroma), blur).r;
     refr.g = bgB(p + off, blur).g;
     refr.b = bgB(p + off*(1.0-uChroma), blur).b;
+
+    // ③ 乳白半透明基底：给玻璃"厚度/材质"，不是纯白也不是全透
+    vec3 milk = vec3(0.86, 0.89, 0.95);
+    vec3 glass = mix(refr, milk, uMilk);
+    // 颜色染色(跟随气泡配色)叠一层薄的
     vec3 tint = uColNeutral;
     if(side < 0.5) tint = uColAI;
     else if(side < 1.5) tint = uColUser;
-    float tintA = uTint;
-    vec3 glass = mix(refr, tint, tintA);
-    // 细亮边：一条很窄(≈2px)的脆边高光，与折射带解耦，避免"肥皂泡"的胖光圈
-    float rimHi = pow(1.0 - smoothstep(0.0, 4.5, dIn), 1.6);
-    glass += vec3(uGlow) * rimHi;
-    float spec = pow(max(dot(normalize(-g), normalize(uLight)),0.0), 24.0) * rimHi;
+    glass = mix(glass, tint, uTint);
+
+    // ④ 内部体积光：左上方一团柔和高光(像光透进玻璃体)，绝非发光描边
+    vec2 hp = lp - vec2(-0.42, -0.5);
+    float vol = exp(-dot(hp, hp) * 1.5) * smoothstep(0.0, 7.0, dIn);
+    glass += vec3(1.0) * vol * uVol;
+
+    // ⑤ 方向性边缘：迎光侧(左上)细亮边，背光侧(右下)内暗边 → 有厚度、不是均匀白圈
+    float rimHi = pow(1.0 - smoothstep(0.0, 5.0, dIn), 1.7);
+    float ndl = dot(g, Ldir);                         // >0 迎光, <0 背光
+    glass += vec3(1.0) * rimHi * max(ndl, 0.0) * uGlow;     // 迎光亮边
+    glass *= 1.0 - rimHi * max(-ndl, 0.0) * 0.30;          // 背光内暗边(厚度感)
+    // ⑥ 锐利高光点：只在迎光细边
+    float spec = pow(max(ndl, 0.0), 22.0) * rimHi;
     glass += vec3(1.0) * spec * 0.35;
+
     col = mix(col, glass, alpha);
   }
   gl_FragColor = vec4(col, 1.0);
@@ -720,9 +740,10 @@ const canvas = document.getElementById('gl');
 let gl, prog, loc = {}, tex, dpr = Math.min(devicePixelRatio || 1, 2);
 let light = [0.0, -1.0];
 
-const DEFAULTS = { strength:22, edge:46, rimPow:1.5, chroma:0.26, glow:0.13, tint:0.05, glassBlur:0,
+const DEFAULTS = { strength:20, edge:46, rimPow:1.5, chroma:0.24, glow:0.42, tint:0.04, glassBlur:0,
+                   milk:0.16, vol:0.16,
                    scale:1, bubRadius:23, bubPadX:20, bubPadY:9, bubMaxW:72 };
-const PARAMS_V = 2;   // 玻璃着色器换成"透镜"方案，edge/rimPow 含义已变 → 旧存档的玻璃参数作废
+const PARAMS_V = 3;   // 材质升级：乳白基底+方向性边缘+体积光；glow 含义变为迎光强度 → 旧存档玻璃参数作废
 let params = Object.assign({}, DEFAULTS);
 try {
   const s = JSON.parse(localStorage.getItem('lg-params') || 'null');
@@ -776,7 +797,7 @@ function initGL(){
   const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
   const a = gl.getAttribLocation(prog, 'a'); gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a,2,gl.FLOAT,false,0,0);
-  ['uRes','uTex','uCount','uLight','uStrength','uEdge','uChroma','uGlow','uRimPow','uTint','uBlur','uBlurN','uColAI','uColUser','uColNeutral']
+  ['uRes','uTex','uCount','uLight','uStrength','uEdge','uChroma','uGlow','uRimPow','uTint','uBlur','uBlurN','uMilk','uVol','uColAI','uColUser','uColNeutral']
     .forEach(n => loc[n] = gl.getUniformLocation(prog, n));
   loc.uRect = gl.getUniformLocation(prog, 'uRect[0]');
   loc.uMeta = gl.getUniformLocation(prog, 'uMeta[0]');
@@ -871,6 +892,8 @@ function frame(){
   gl.uniform1f(loc.uGlow, params.glow);
   gl.uniform1f(loc.uRimPow, params.rimPow);
   gl.uniform1f(loc.uTint, params.tint);
+  gl.uniform1f(loc.uMilk, params.milk);
+  gl.uniform1f(loc.uVol, params.vol);
   // 磨砂散射基线：气泡至少 2px(柔化高频条纹但保留折射)，输入框/顶栏更高(至少 5px，更均匀)
   gl.uniform1f(loc.uBlur, Math.max(params.glassBlur, 2) * dpr);
   gl.uniform1f(loc.uBlurN, Math.max(params.glassBlur + 3, 5.5) * dpr);
@@ -1078,7 +1101,7 @@ document.getElementById('font-reset').addEventListener('click', () => {
 try { const sf = localStorage.getItem('lg-font'); if(sf) applyFont(sf); } catch(e){}
 
 /* ===== 滑块 ===== */
-const KEYS = ['strength','edge','rimPow','chroma','glow','tint','glassBlur','scale','bubRadius','bubPadX','bubPadY','bubMaxW'];
+const KEYS = ['strength','edge','rimPow','chroma','milk','vol','glow','tint','glassBlur','scale','bubRadius','bubPadX','bubPadY','bubMaxW'];
 const INT = { strength:1, edge:1, glassBlur:1, bubRadius:1, bubPadX:1, bubPadY:1, bubMaxW:1 };
 const fmt = (k,v) => k==='scale' ? v.toFixed(2)+'×' : INT[k] ? Math.round(v) : (k==='rimPow') ? v.toFixed(1) : v.toFixed(2);
 function syncPanel(){ KEYS.forEach(k => { document.getElementById('r-'+k).value = params[k]; document.getElementById('v-'+k).textContent = fmt(k, params[k]); }); }
