@@ -1,0 +1,626 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Liquid Glass Lab</title>
+<style>
+  :root{
+    --bg:#0c0e12; --panel:#14171d; --panel2:#1b1f27; --line:#2a2f3a;
+    --fg:#e8ebf0; --dim:#96a0b0; --accent:#7ea2ff; --accent2:#5ad1c8;
+    color-scheme: dark;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; height:100%;}
+  body{
+    background:var(--bg); color:var(--fg);
+    font:13px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC",system-ui,sans-serif;
+    display:flex; flex-direction:column; height:100vh; overflow:hidden;
+  }
+
+  header{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:10px 14px calc(10px); border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,#12151b,#0e1116);
+  }
+  header h1{font-size:14px; margin:0; font-weight:650; letter-spacing:.2px;}
+  header .tag{font-size:11px; color:var(--dim); border:1px solid var(--line); padding:2px 7px; border-radius:999px;}
+  header .spacer{flex:1;}
+  header button{
+    font:inherit; font-size:12px; color:var(--fg); background:var(--panel2);
+    border:1px solid var(--line); border-radius:9px; padding:6px 11px; cursor:pointer;
+  }
+  header button:hover{border-color:var(--accent);}
+  header button.primary{background:var(--accent); color:#0b0e14; border-color:var(--accent); font-weight:600;}
+
+  .stage{position:relative; flex:1; min-height:0; overflow:hidden; background:#000;}
+  #gl{position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none;}
+  .labels{position:absolute; inset:0; pointer-events:none;}
+  .glabel{
+    position:absolute; transform:translate(-50%,-50%);
+    font-size:11px; font-weight:600; color:#fff;
+    text-shadow:0 1px 3px rgba(0,0,0,.7), 0 0 2px rgba(0,0,0,.5);
+    white-space:nowrap; pointer-events:none; text-align:center;
+  }
+  .glabel small{display:block; font-weight:400; font-size:9.5px; opacity:.85;}
+  .glabel.sel::after{
+    content:""; position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    width:8px;height:8px;
+  }
+  .hint{
+    position:absolute; left:12px; bottom:10px; right:12px; pointer-events:none;
+    font-size:11px; color:rgba(255,255,255,.75); text-shadow:0 1px 2px rgba(0,0,0,.8);
+  }
+
+  .dock{
+    height:44%; min-height:250px; max-height:56%;
+    border-top:1px solid var(--line); background:var(--panel);
+    display:flex; flex-direction:column;
+  }
+  .dock-tabs{display:flex; gap:2px; padding:8px 10px 0; overflow-x:auto;}
+  .dock-tabs::-webkit-scrollbar{height:0;}
+  .dtab{
+    font:inherit; font-size:11.5px; color:var(--dim); background:transparent;
+    border:1px solid transparent; border-bottom:none; border-radius:8px 8px 0 0;
+    padding:6px 10px; cursor:pointer; white-space:nowrap;
+  }
+  .dtab.on{color:var(--fg); background:var(--panel2); border-color:var(--line);}
+
+  .dock-body{flex:1; min-height:0; overflow-y:auto; padding:12px 14px 4px;
+    display:grid; grid-template-columns:1fr 1fr; gap:6px 18px; align-content:start;}
+  @media(max-width:560px){ .dock-body{grid-template-columns:1fr;} }
+
+  .sel-row{grid-column:1/-1; display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:4px;}
+  .sel-row .who{font-weight:600;}
+  .sel-row .role{color:var(--dim); font-size:11.5px;}
+  .sel-row .spacer{flex:1;}
+  .sel-row button{
+    font:inherit; font-size:11.5px; color:var(--fg); background:var(--panel2);
+    border:1px solid var(--line); border-radius:8px; padding:5px 9px; cursor:pointer;
+  }
+  .sel-row button:hover{border-color:var(--accent);}
+
+  .toggles{grid-column:1/-1; display:flex; flex-wrap:wrap; gap:6px 12px; padding:6px 0 8px; border-bottom:1px dashed var(--line); margin-bottom:6px;}
+  .toggles label{display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--fg); cursor:pointer; user-select:none;}
+  .toggles input{width:15px; height:15px; accent-color:var(--accent2);}
+
+  .ctrl{display:flex; flex-direction:column; gap:2px; padding:2px 0;}
+  .ctrl .lab{display:flex; justify-content:space-between; font-size:11.5px; color:var(--dim);}
+  .ctrl .lab b{color:var(--fg); font-weight:600;}
+  .ctrl input[type=range]{width:100%; accent-color:var(--accent);}
+  .ctrl.disabled{opacity:.38;}
+  .ctrl input[type=color]{width:34px; height:22px; padding:0; border:1px solid var(--line); border-radius:6px; background:none;}
+  .ctrl .row{display:flex; align-items:center; gap:8px;}
+
+  .readout{
+    grid-column:1/-1; margin-top:6px; border-top:1px solid var(--line); padding-top:8px;
+  }
+  .readout .rt{font-size:11px; color:var(--dim); margin-bottom:4px;}
+  .readout pre{
+    margin:0; font:11px/1.4 "SF Mono",ui-monospace,Menlo,Consolas,monospace;
+    color:#b9c4d4; background:#0e1116; border:1px solid var(--line); border-radius:8px;
+    padding:8px 10px; white-space:pre-wrap; word-break:break-word; max-height:120px; overflow:auto;
+  }
+</style>
+
+<header>
+  <h1>Liquid Glass Lab</h1>
+  <span class="tag">仅依据 Apple 官方描述 · 无第三方库</span>
+  <span class="spacer"></span>
+  <button id="btn-reset">RESET（当前）</button>
+  <button id="btn-apple" class="primary">Apple-like preset</button>
+  <button id="btn-resetall">Reset All</button>
+</header>
+
+<div class="stage">
+  <canvas id="gl"></canvas>
+  <div class="labels" id="labels"></div>
+  <div class="hint">点选任一玻璃块进行调节 · 拖动可移动 · 拖到不同背景上观察 lensing / tint / 可读性</div>
+</div>
+
+<div class="dock">
+  <div class="dock-tabs" id="dock-tabs"></div>
+  <div class="dock-body" id="dock-body"></div>
+</div>
+
+<script>
+"use strict";
+/* =========================================================================
+   Liquid Glass Lab —— 独立实验页
+   目标：按 Apple 官方对 Liquid Glass 的描述（dynamically bends/shapes/
+   concentrates light；根据 underlying content / 尺寸 / 环境自适应）验证其
+   视觉行为，而不是把它简化成 blur + 白底 + 描边。
+   实现：WebGL 片元着色器对「底层测试图案纹理」做真实折射 / 透镜 / 色散 /
+   方向性边缘 / 阴影 / 自适应对比；每块玻璃参数与开关完全独立。
+   ========================================================================= */
+
+const canvas = document.getElementById('gl');
+const labelsEl = document.getElementById('labels');
+const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+/* ---------- 1) 底层丰富测试图案（画到 2D 画布，再上传为纹理） ---------- */
+const bgCanvas = document.createElement('canvas');
+const bgCtx = bgCanvas.getContext('2d');
+
+function drawBackground(w, h){
+  bgCanvas.width = w; bgCanvas.height = h;
+  const g = bgCtx;
+  g.clearRect(0,0,w,h);
+  // 网格布局：竖屏 2 列 3 行，横屏 3 列 2 行
+  const landscape = w > h;
+  const cols = landscape ? 3 : 2;
+  const rows = landscape ? 2 : 3;
+  const tw = w / cols, th = h / rows;
+  const tiles = [redGradient, bwContrast, colorBlocks, fineStripes, figureOutline, solidColor];
+  let i = 0;
+  for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
+    const fn = tiles[i % tiles.length]; i++;
+    g.save(); g.beginPath(); g.rect(c*tw, r*th, tw, th); g.clip();
+    fn(g, c*tw, r*th, tw, th);
+    g.restore();
+  }
+  // 轻微分隔线，便于识别 tile 边界
+  g.strokeStyle = 'rgba(255,255,255,0.05)'; g.lineWidth = 1;
+  for(let c=1;c<cols;c++){ g.beginPath(); g.moveTo(c*tw,0); g.lineTo(c*tw,h); g.stroke(); }
+  for(let r=1;r<rows;r++){ g.beginPath(); g.moveTo(0,r*th); g.lineTo(w,r*th); g.stroke(); }
+}
+function redGradient(g,x,y,w,h){
+  const gr = g.createLinearGradient(x,y,x+w,y+h);
+  gr.addColorStop(0,'#2a0006'); gr.addColorStop(.5,'#c1121f'); gr.addColorStop(1,'#ff5a5f');
+  g.fillStyle = gr; g.fillRect(x,y,w,h);
+  const rg = g.createRadialGradient(x+w*.5,y+h*.5,4,x+w*.5,y+h*.5,Math.max(w,h)*.6);
+  rg.addColorStop(0,'rgba(255,220,180,.55)'); rg.addColorStop(1,'rgba(0,0,0,0)');
+  g.fillStyle = rg; g.fillRect(x,y,w,h);
+}
+function bwContrast(g,x,y,w,h){
+  g.fillStyle='#fff'; g.fillRect(x,y,w,h);
+  const n=6, cw=w/n, ch=h/n;
+  g.fillStyle='#000';
+  for(let a=0;a<n;a++) for(let b=0;b<n;b++) if((a+b)%2===0) g.fillRect(x+a*cw,y+b*ch,cw,ch);
+  g.fillStyle='#000'; g.beginPath(); g.arc(x+w*.5,y+h*.5,Math.min(w,h)*.22,0,7); g.fill();
+  g.fillStyle='#fff'; g.beginPath();
+  g.moveTo(x+w*.5,y+h*.3); g.lineTo(x+w*.66,y+h*.62); g.lineTo(x+w*.34,y+h*.62); g.closePath(); g.fill();
+}
+function colorBlocks(g,x,y,w,h){
+  const cs=['#0057ff','#00c853','#ffd400','#d500f9'];
+  const hw=w/2, hh=h/2;
+  g.fillStyle=cs[0]; g.fillRect(x,y,hw,hh);
+  g.fillStyle=cs[1]; g.fillRect(x+hw,y,hw,hh);
+  g.fillStyle=cs[2]; g.fillRect(x,y+hh,hw,hh);
+  g.fillStyle=cs[3]; g.fillRect(x+hw,y+hh,hw,hh);
+}
+function fineStripes(g,x,y,w,h){
+  g.fillStyle='#0e1116'; g.fillRect(x,y,w,h);
+  g.save(); g.beginPath(); g.rect(x,y,w,h); g.clip();
+  g.strokeStyle='#e9edf3'; g.lineWidth=2;
+  const gap=7;
+  g.translate(x,y);
+  for(let d=-h; d<w; d+=gap){ g.beginPath(); g.moveTo(d,0); g.lineTo(d+h,h); g.stroke(); }
+  g.restore();
+}
+function figureOutline(g,x,y,w,h){
+  const gr=g.createLinearGradient(x,y,x,y+h);
+  gr.addColorStop(0,'#dfe7f0'); gr.addColorStop(1,'#9fb0c4');
+  g.fillStyle=gr; g.fillRect(x,y,w,h);
+  // 简单人物剪影（头 + 肩）
+  g.fillStyle='#1a2230';
+  const cx=x+w*.5, cy=y+h*.42, hr=Math.min(w,h)*.16;
+  g.beginPath(); g.arc(cx,cy,hr,0,7); g.fill();
+  g.beginPath();
+  g.moveTo(cx-hr*1.9, y+h);
+  g.quadraticCurveTo(cx-hr*1.9, cy+hr*1.2, cx, cy+hr*1.1);
+  g.quadraticCurveTo(cx+hr*1.9, cy+hr*1.2, cx+hr*1.9, y+h);
+  g.closePath(); g.fill();
+  // 轮廓圆环
+  g.strokeStyle='rgba(0,0,0,.35)'; g.lineWidth=3;
+  g.beginPath(); g.arc(x+w*.8,y+h*.22,Math.min(w,h)*.1,0,7); g.stroke();
+}
+function solidColor(g,x,y,w,h){
+  g.fillStyle='#0d8f86'; g.fillRect(x,y,w,h);
+}
+
+/* ---------- 2) 玻璃块定义（A–F 各实验，参数与开关独立） ---------- */
+// 每块玻璃保存：位置(CSS px 相对 stage)、尺寸、厚度、参数、开关、角色默认
+function baseParams(){
+  return { transparency:0.72, blur:4, lens:22, edge:0.5, shadow:0.5,
+           tint:'#9fb8ff', tintAmt:0.05, contrast:1.0, chroma:0.26, size:1.0, thick:28 };
+}
+function baseToggles(){
+  return { blur:true, lens:true, tint:true, shadow:true, edge:true, contrast:true, chroma:true };
+}
+// 角色差异化（只改与该实验相关的少数量，其余用 base，方便对照观察单一变量）
+const ROLES = {
+  regular:  p => Object.assign(p,{ transparency:0.68, blur:5, contrast:1.0, tint:'#aebfff', tintAmt:0.05 }),
+  clear:    (p,t)=>{ Object.assign(p,{ transparency:0.96, blur:1, tint:'#000000', tintAmt:0.0, contrast:0.0, thick:22 }); t.tint=false; t.contrast=false; },
+  sizeS:    p => Object.assign(p,{ size:0.62, thick:18 }),
+  sizeM:    p => Object.assign(p,{ size:1.0,  thick:30 }),
+  sizeL:    p => Object.assign(p,{ size:1.5,  thick:48 }),
+  near:     p => p,
+  inter:    p => Object.assign(p,{ transparency:0.8, lens:30 }),
+};
+function mkGlass(id,label,role,sub, x,y,w,h){
+  const p = baseParams(); const t = baseToggles();
+  (ROLES[role]||(q=>q))(p,t);
+  return { id, label, role, sub, x, y, w, h, p, t };
+}
+
+// 实验分组（tab）
+const GROUPS = [
+  { key:'A', name:'A · Regular', ids:['A1'] },
+  { key:'B', name:'B · Clear',   ids:['B1'] },
+  { key:'C', name:'C · 尺寸/厚度', ids:['C1','C2','C3'] },
+  { key:'D', name:'D · 覆盖不同背景', ids:['D1'] },
+  { key:'E', name:'E · 相邻玻璃',  ids:['E1','E2'] },
+  { key:'F', name:'F · Interactive', ids:['F1'] },
+];
+
+let glasses = [];
+function buildGlasses(){
+  const W = stageW(), H = stageH();
+  glasses = [
+    mkGlass('A1','A','regular','Regular · 自适应', W*0.30, H*0.24, 200, 96),
+    mkGlass('B1','B','clear','Clear · 常透明',     W*0.70, H*0.24, 200, 96),
+    mkGlass('C1','C1','sizeS','小',  W*0.20, H*0.52, 120, 88),
+    mkGlass('C2','C2','sizeM','中',  W*0.50, H*0.52, 120, 88),
+    mkGlass('C3','C3','sizeL','大',  W*0.80, H*0.54, 120, 88),
+    mkGlass('D1','D','sizeM','拖我扫过所有背景', W*0.50, H*0.80, 240, 84),
+    mkGlass('E1','E1','near','相邻·左', W*0.40, H*0.40, 150, 92),
+    mkGlass('E2','E2','near','相邻·右', W*0.585,H*0.40, 150, 92),
+    mkGlass('F1','F','inter','跟随/拖动', W*0.50, H*0.66, 170, 100),
+  ];
+}
+function glassById(id){ return glasses.find(g=>g.id===id); }
+
+/* ---------- 3) WebGL ---------- */
+let gl, prog, loc={}, tex, bufQuad;
+const VERT = 'attribute vec2 a; void main(){ gl_Position=vec4(a,0.,1.); }';
+const FRAG = `
+precision highp float;
+uniform vec2 uRes;
+uniform sampler2D uBg;
+uniform float uIsBg;
+uniform vec4 uRect;            // cx,cy,hw,hh (device px, y-down)
+uniform float uRadius, uThick;
+uniform float uTrans, uBlur, uLens, uEdge, uShadow, uTintAmt, uContrast, uChroma;
+uniform vec3 uTint;
+uniform vec2 uLight;           // 光方向(屏幕空间, y-down)
+uniform float tBlur,tLens,tTint,tShadow,tEdge,tContrast,tChroma;
+float sdRound(vec2 p, vec2 c, vec2 hw, float r){
+  vec2 q = abs(p-c)-hw+r; return min(max(q.x,q.y),0.)+length(max(q,0.))-r;
+}
+float sceneD(vec2 p){ return sdRound(p, uRect.xy, uRect.zw, uRadius); }
+vec3 bg(vec2 p){ return texture2D(uBg, vec2(p.x/uRes.x, p.y/uRes.y)).rgb; }
+vec3 bgB(vec2 p, float rad){
+  vec3 s = bg(p);
+  if(rad > 0.5){
+    s += bg(p+vec2(rad,0.))+bg(p-vec2(rad,0.))+bg(p+vec2(0.,rad))+bg(p-vec2(0.,rad));
+    float r2 = rad*0.7071;
+    s += bg(p+vec2(r2,r2))+bg(p+vec2(-r2,r2))+bg(p+vec2(r2,-r2))+bg(p+vec2(-r2,-r2));
+    s /= 9.0;
+  }
+  return s;
+}
+float lum(vec3 c){ return dot(c, vec3(0.299,0.587,0.114)); }
+void main(){
+  vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
+  if(uIsBg > 0.5){ gl_FragColor = vec4(bg(p), 1.0); return; }
+
+  float d = sceneD(p);
+  float cover = smoothstep(1.2, -1.2, d);
+
+  // —— 阴影 / separation：投在玻璃「后方」(向光反方向偏移)，随背景亮度变化 ——
+  vec2 shOff = -uLight * (8.0 + uThick*0.15);
+  float dS = sdRound(p - shOff, uRect.xy, uRect.zw, uRadius);
+  float shadow = tShadow * uShadow * smoothstep(20.0, 0.0, dS) * (1.0 - cover);
+  // 背景越亮，阴影越明显(separation 更需要)
+  float bl = lum(bg(p));
+  shadow *= mix(0.55, 1.0, bl);
+
+  if(cover < 0.001){
+    if(shadow < 0.001) discard;
+    gl_FragColor = vec4(0.0, 0.0, 0.0, shadow*0.5);
+    return;
+  }
+
+  float e = 1.5;
+  vec2 g = normalize(vec2(sceneD(p+vec2(e,0.))-sceneD(p-vec2(e,0.)),
+                          sceneD(p+vec2(0.,e))-sceneD(p-vec2(0.,e))) + 1e-6);
+  float dIn = -d;
+
+  // —— lensing / refraction：固定厚度 → 材质随尺寸变化 ——
+  float t = clamp(dIn / max(uThick,1.0), 0.0, 1.0);
+  float lens = pow(1.0 - t, 1.5);
+  vec2 off = g * uLens * lens * tLens;
+  float blur = uBlur * tBlur * (1.0 + lens*0.6);
+  float ch = uChroma * tChroma;
+  vec3 refr;
+  refr.r = bgB(p + off*(1.0+ch), blur).r;
+  refr.g = bgB(p + off,          blur).g;
+  refr.b = bgB(p + off*(1.0-ch), blur).b;
+
+  // —— transparency：1=几乎全透(只折射)，越小越多乳白材质 ——
+  vec3 milk = vec3(0.9, 0.92, 0.96);
+  vec3 glass = mix(milk, refr, clamp(uTrans, 0.0, 1.0));
+
+  // —— tint ——
+  glass = mix(glass, uTint, uTintAmt * tTint);
+
+  // —— adaptive contrast（Regular 变体思路）：按底层亮度反向微调以保可读 ——
+  float L = lum(refr);
+  vec3 adapt = L > 0.5 ? vec3(0.05,0.06,0.08) : vec3(0.97,0.98,1.0);
+  glass = mix(glass, adapt, clamp(uContrast,0.0,1.5) * tContrast * 0.22);
+
+  // —— edge definition：方向性(迎光亮/背光暗)，定义形状与厚度，非均匀白圈 ——
+  float rimHi = pow(1.0 - smoothstep(0.0, 5.0, dIn), 1.7) * tEdge;
+  float ndl = dot(g, normalize(uLight));
+  glass += vec3(1.0) * rimHi * max(-ndl, 0.0) * uEdge;          // 迎光侧亮边
+  glass *= 1.0 - rimHi * max(ndl, 0.0) * 0.30;                  // 背光侧内暗边
+  float spec = pow(max(-ndl, 0.0), 22.0) * rimHi;
+  glass += vec3(1.0) * spec * 0.4 * uEdge;
+
+  // 合成：阴影在下(cover 之外已单独输出)，此处输出玻璃本体
+  gl_FragColor = vec4(glass, cover);
+}`;
+
+function compile(type,src){ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+function initGL(){
+  gl = canvas.getContext('webgl', {premultipliedAlpha:false, antialias:true, alpha:false});
+  if(!gl) return false;
+  prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+  gl.linkProgram(prog);
+  if(!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+  bufQuad = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bufQuad);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+  const a = gl.getAttribLocation(prog,'a'); gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a,2,gl.FLOAT,false,0,0);
+  ['uRes','uBg','uIsBg','uRect','uRadius','uThick','uTrans','uBlur','uLens','uEdge','uShadow',
+   'uTintAmt','uContrast','uChroma','uTint','uLight','tBlur','tLens','tTint','tShadow','tEdge','tContrast','tChroma']
+    .forEach(n => loc[n]=gl.getUniformLocation(prog,n));
+  tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  return true;
+}
+function hexToVec(h){
+  h=(h||'#000000').replace('#',''); if(h.length===3) h=h.split('').map(c=>c+c).join('');
+  const n=parseInt(h,16); return [((n>>16)&255)/255, ((n>>8)&255)/255, (n&255)/255];
+}
+function stageW(){ return canvas.clientWidth; }
+function stageH(){ return canvas.clientHeight; }
+
+function resize(){
+  const w = Math.round(canvas.clientWidth*dpr), h = Math.round(canvas.clientHeight*dpr);
+  if(canvas.width!==w || canvas.height!==h){
+    canvas.width=w; canvas.height=h;
+    drawBackground(w,h);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,bgCanvas);
+  }
+  gl.viewport(0,0,w,h);
+}
+
+const light = [-0.55, -0.83];   // 屏幕空间光向(左上)，y-down
+function render(){
+  resize();
+  gl.uniform2f(loc.uRes, canvas.width, canvas.height);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(loc.uBg, 0);
+  gl.uniform2f(loc.uLight, light[0], light[1]);
+
+  // pass0：底层背景
+  gl.uniform1f(loc.uIsBg, 1.0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  // 逐块玻璃（选中的最后画，叠在最上）
+  gl.uniform1f(loc.uIsBg, 0.0);
+  const order = glasses.slice().sort((a,b)=> (a.id===selId?1:0)-(b.id===selId?1:0));
+  for(const G of order){
+    const cx=(G.x + 0)*dpr, cy=(G.y)*dpr;
+    const hw=(G.w*G.p.size/2)*dpr, hh=(G.h*G.p.size/2)*dpr;
+    const rad=Math.min(Math.min(hw,hh), 26*dpr);
+    gl.uniform4f(loc.uRect, cx, cy, hw, hh);
+    gl.uniform1f(loc.uRadius, rad);
+    gl.uniform1f(loc.uThick, G.p.thick*dpr);
+    gl.uniform1f(loc.uTrans, G.p.transparency);
+    gl.uniform1f(loc.uBlur, G.p.blur*dpr);
+    gl.uniform1f(loc.uLens, G.p.lens*dpr);
+    gl.uniform1f(loc.uEdge, G.p.edge);
+    gl.uniform1f(loc.uShadow, G.p.shadow);
+    gl.uniform1f(loc.uTintAmt, G.p.tintAmt);
+    gl.uniform1f(loc.uContrast, G.p.contrast);
+    gl.uniform1f(loc.uChroma, G.p.chroma);
+    gl.uniform3fv(loc.uTint, hexToVec(G.p.tint));
+    gl.uniform1f(loc.tBlur, G.t.blur?1:0);
+    gl.uniform1f(loc.tLens, G.t.lens?1:0);
+    gl.uniform1f(loc.tTint, G.t.tint?1:0);
+    gl.uniform1f(loc.tShadow, G.t.shadow?1:0);
+    gl.uniform1f(loc.tEdge, G.t.edge?1:0);
+    gl.uniform1f(loc.tContrast, G.t.contrast?1:0);
+    gl.uniform1f(loc.tChroma, G.t.chroma?1:0);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  positionLabels();
+  requestAnimationFrame(render);
+}
+
+/* ---------- 4) 标签层 ---------- */
+function positionLabels(){
+  for(const G of glasses){
+    let el = document.getElementById('lab-'+G.id);
+    if(!el){
+      el=document.createElement('div'); el.className='glabel'; el.id='lab-'+G.id;
+      el.innerHTML = '<span>'+G.label+'</span><small>'+G.sub+'</small>';
+      labelsEl.appendChild(el);
+    }
+    el.style.left = G.x+'px';
+    el.style.top  = (G.y - (G.h*G.p.size/2) - 14)+'px';
+    el.classList.toggle('sel', G.id===selId);
+    el.style.opacity = G.id===selId ? '1' : '0.72';
+  }
+}
+
+/* ---------- 5) 交互：选择 + 拖动 ---------- */
+let selId = 'A1';
+let drag = null;
+function hitTest(x,y){
+  // 从上层(选中优先)往下找命中
+  const order = glasses.slice().sort((a,b)=> (b.id===selId?1:0)-(a.id===selId?1:0));
+  for(const G of order){
+    const hw=G.w*G.p.size/2, hh=G.h*G.p.size/2;
+    if(x>=G.x-hw && x<=G.x+hw && y>=G.y-hh && y<=G.y+hh) return G;
+  }
+  return null;
+}
+canvas.addEventListener('pointerdown', e=>{
+  const r=canvas.getBoundingClientRect();
+  const x=e.clientX-r.left, y=e.clientY-r.top;
+  const G=hitTest(x,y);
+  if(G){ selId=G.id; drag={id:G.id, dx:x-G.x, dy:y-G.y}; canvas.setPointerCapture(e.pointerId); buildControls(); }
+});
+canvas.addEventListener('pointermove', e=>{
+  if(!drag) return;
+  const r=canvas.getBoundingClientRect();
+  const G=glassById(drag.id);
+  G.x = Math.max(0, Math.min(stageW(), (e.clientX-r.left)-drag.dx));
+  G.y = Math.max(0, Math.min(stageH(), (e.clientY-r.top)-drag.dy));
+});
+canvas.addEventListener('pointerup', ()=>{ drag=null; });
+canvas.addEventListener('pointercancel', ()=>{ drag=null; });
+
+/* ---------- 6) 控制面板 ---------- */
+const TABS = document.getElementById('dock-tabs');
+const BODY = document.getElementById('dock-body');
+let curGroup = 'A';
+
+const SLIDERS = [
+  ['transparency','透明度 transparency',0,1,0.01],
+  ['blur','磨砂/散射 blur',0,14,0.1],
+  ['lens','折射/透镜 lensing',0,60,0.5],
+  ['edge','边缘定义 edge',0,1.2,0.01],
+  ['shadow','阴影 shadow',0,1,0.01],
+  ['tintAmt','tint 强度',0,0.4,0.01],
+  ['contrast','自适应对比 contrast',0,1.5,0.01],
+  ['chroma','色散 chromatic',0,0.8,0.01],
+  ['size','尺寸 size',0.4,1.8,0.01],
+  ['thick','厚度 thickness',6,70,1],
+];
+const TOG = [
+  ['blur','blur'],['lens','lensing'],['tint','tint'],['shadow','shadow'],
+  ['edge','edge'],['contrast','adaptive contrast'],['chroma','chromatic aberration'],
+];
+// tint 强度开关映射到 t.tint；tint 颜色单独控件
+const SLIDER_TOG = { blur:'blur', lens:'lens', tintAmt:'tint', shadow:'shadow', edge:'edge', contrast:'contrast', chroma:'chroma' };
+
+function buildTabs(){
+  TABS.innerHTML='';
+  GROUPS.forEach(gp=>{
+    const b=document.createElement('button'); b.className='dtab'+(gp.key===curGroup?' on':'');
+    b.textContent=gp.name;
+    b.onclick=()=>{ curGroup=gp.key; if(!gp.ids.includes(selId)) selId=gp.ids[0]; buildTabs(); buildControls(); };
+    TABS.appendChild(b);
+  });
+}
+function buildControls(){
+  const gp = GROUPS.find(g=>g.key===curGroup) || GROUPS[0];
+  const G = glassById(selId) || glassById(gp.ids[0]);
+  BODY.innerHTML='';
+
+  // 选择行（组内多块玻璃时可切换）
+  const sel=document.createElement('div'); sel.className='sel-row';
+  const who=document.createElement('span'); who.className='who'; who.textContent='当前：'+G.label;
+  const role=document.createElement('span'); role.className='role'; role.textContent='('+G.sub+')';
+  sel.appendChild(who); sel.appendChild(role);
+  if(gp.ids.length>1){
+    gp.ids.forEach(id=>{
+      const b=document.createElement('button'); b.textContent=glassById(id).label;
+      if(id===selId) b.style.borderColor='var(--accent)';
+      b.onclick=()=>{ selId=id; buildControls(); };
+      sel.appendChild(b);
+    });
+  }
+  const sp=document.createElement('span'); sp.className='spacer'; sel.appendChild(sp);
+  BODY.appendChild(sel);
+
+  // 开关行
+  const tg=document.createElement('div'); tg.className='toggles';
+  TOG.forEach(([k,label])=>{
+    const l=document.createElement('label');
+    const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=!!G.t[k];
+    cb.onchange=()=>{ G.t[k]=cb.checked; buildControls(); updateReadout(); };
+    l.appendChild(cb); l.appendChild(document.createTextNode(label));
+    tg.appendChild(l);
+  });
+  BODY.appendChild(tg);
+
+  // 滑块
+  SLIDERS.forEach(([key,label,min,max,step])=>{
+    const wrap=document.createElement('div'); wrap.className='ctrl';
+    const togKey = SLIDER_TOG[key];
+    if(togKey && !G.t[togKey]) wrap.classList.add('disabled');
+    const lab=document.createElement('div'); lab.className='lab';
+    const val=document.createElement('b'); val.textContent=fmt(key,G.p[key]);
+    lab.innerHTML='<span>'+label+'</span>'; lab.appendChild(val);
+    wrap.appendChild(lab);
+    const row=document.createElement('div'); row.className='row';
+    const inp=document.createElement('input'); inp.type='range'; inp.min=min; inp.max=max; inp.step=step; inp.value=G.p[key];
+    inp.oninput=()=>{ G.p[key]=parseFloat(inp.value); val.textContent=fmt(key,G.p[key]); updateReadout(); };
+    row.appendChild(inp);
+    if(key==='tintAmt'){
+      const col=document.createElement('input'); col.type='color'; col.value=G.p.tint;
+      col.oninput=()=>{ G.p.tint=col.value; updateReadout(); };
+      row.appendChild(col);
+    }
+    wrap.appendChild(row);
+    BODY.appendChild(wrap);
+  });
+
+  // 参数读出
+  const ro=document.createElement('div'); ro.className='readout';
+  ro.innerHTML='<div class="rt">当前所有参数（selected glass）</div><pre id="readout-pre"></pre>';
+  BODY.appendChild(ro);
+  updateReadout();
+}
+function fmt(k,v){ return (k==='thick')?Math.round(v):(+v).toFixed(2); }
+function updateReadout(){
+  const pre=document.getElementById('readout-pre'); if(!pre) return;
+  const G=glassById(selId);
+  const obj={ glass:G.label, role:G.role, size:{w:Math.round(G.w*G.p.size), h:Math.round(G.h*G.p.size)},
+    params:Object.fromEntries(Object.entries(G.p).map(([k,v])=>[k, (k==='tint')?v:(typeof v==='number'?+(+v).toFixed(3):v)])),
+    toggles:G.t };
+  pre.textContent=JSON.stringify(obj,null,2);
+}
+
+/* ---------- 7) 预设 / 重置 ---------- */
+// Apple-like：几乎全透 + 真折射 + 克制乳白 + 方向性边缘 + 自适应对比；低白、低 tint
+function applePreset(G){
+  Object.assign(G.p,{ transparency:0.88, blur:2.5, lens:24, edge:0.55, shadow:0.5,
+    tint:'#cfe0ff', tintAmt:0.03, contrast:1.0, chroma:0.30, thick:Math.max(20,G.p.thick) });
+  Object.assign(G.t,{ blur:true,lens:true,tint:true,shadow:true,edge:true,contrast:true,chroma:true });
+}
+function resetGlass(G){
+  const p=baseParams(), t=baseToggles();
+  (ROLES[G.role]||(q=>q))(p,t);
+  G.p=p; G.t=t;
+}
+document.getElementById('btn-apple').onclick=()=>{ applePreset(glassById(selId)); buildControls(); };
+document.getElementById('btn-reset').onclick=()=>{ resetGlass(glassById(selId)); buildControls(); };
+document.getElementById('btn-resetall').onclick=()=>{ glasses.forEach(resetGlass); buildControls(); };
+
+/* ---------- 启动 ---------- */
+function boot(){
+  if(!initGL()){ document.body.innerHTML='<p style="padding:20px">你的浏览器不支持 WebGL，无法运行本实验页。</p>'; return; }
+  // 初次 sizing 需要真实 clientWidth/Height
+  requestAnimationFrame(()=>{
+    buildGlasses();
+    buildTabs();
+    buildControls();
+    resize();
+    requestAnimationFrame(render);
+  });
+}
+window.addEventListener('resize', ()=>{ /* 背景与玻璃位置随窗口；玻璃用相对像素，保持不变即可 */ });
+boot();
+</script>
