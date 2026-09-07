@@ -15,8 +15,9 @@
 <title>液态玻璃聊天</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  /* 统一用 100vh，避免 iOS PWA 底部白边（不要混用 100% / 100dvh / fixed body）*/
-  html, body { height: 100vh; margin: 0; }
+  /* 浏览器内用 100dvh(只算可见区域，避免输入框躲到 Safari 工具栏后面)；
+     PWA 独立模式下面用媒体查询强制回 100vh，避免底部白边 */
+  html, body { height: 100vh; height: 100dvh; margin: 0; }
   body {
     font-family: var(--app-font);
     background: #0b1016;
@@ -32,10 +33,16 @@
   .phone {
     position: relative; isolation: isolate;
     width: 100%; max-width: 402px;
-    height: 100vh;              /* 真机铺满整屏，消除底部白边 */
+    height: 100vh;
+    height: 100dvh;            /* 可见区域高度：输入框不被 Safari 底栏遮住 */
     overflow: hidden; color: #fff;
     display: flex; flex-direction: column;
     background: #12181f;
+  }
+  /* PWA 独立模式：回到 100vh，避免底部白边 */
+  @media (display-mode: standalone), (display-mode: fullscreen) {
+    html, body { height: 100vh; }
+    .phone { height: 100vh; }
   }
   /* 只有宽屏（电脑预览）才把它做成"手机框"，限高 + 圆角 */
   @media (min-width: 440px) {
