@@ -1,9 +1,8 @@
 <title>液态玻璃聊天</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  /* 浏览器内用 100dvh(只算可见区域，避免输入框躲到 Safari 工具栏后面)；
-     PWA 独立模式下面用媒体查询强制回 100vh，避免底部白边 */
-  html, body { height: 100vh; height: 100dvh; margin: 0; }
+  /* 统一用 100vh，避免 iOS PWA 底部白边（不要混用 100% / 100dvh / fixed body）*/
+  html, body { height: 100vh; margin: 0; }
   body {
     font-family: var(--app-font);
     background: #0b1016;
@@ -19,16 +18,10 @@
   .phone {
     position: relative; isolation: isolate;
     width: 100%; max-width: 402px;
-    height: 100vh;
-    height: 100dvh;            /* 可见区域高度：输入框不被 Safari 底栏遮住 */
+    height: 100vh;              /* 真机铺满整屏，消除底部白边 */
     overflow: hidden; color: #fff;
     display: flex; flex-direction: column;
     background: #12181f;
-  }
-  /* PWA 独立模式：回到 100vh，避免底部白边 */
-  @media (display-mode: standalone), (display-mode: fullscreen) {
-    html, body { height: 100vh; }
-    .phone { height: 100vh; }
   }
   /* 只有宽屏（电脑预览）才把它做成"手机框"，限高 + 圆角 */
   @media (min-width: 440px) {
@@ -49,8 +42,7 @@
 
   /* ===== 顶栏 ===== */
   .topbar {
-    /* 悬浮在消息层之上：消息从它下面滚过，玻璃才能折射到真实内容(Apple 悬浮玻璃条) */
-    position: absolute; top: 0; left: 0; right: 0; z-index: 4;
+    position: relative; z-index: 4;
     display: flex; align-items: center; justify-content: space-between;
     gap: 8px;
     /* 顶部叠加安全区，避开灵动岛/状态栏 */
@@ -126,9 +118,6 @@
     color: rgba(255,255,255,0.96);
     text-shadow: 0 1px 2px rgba(0,0,0,0.30);
   }
-  /* 文字明暗跟随气泡配色亮度自适应，保证在真实色块上可读 */
-  .message.left  span { color: var(--ai-fg, rgba(255,255,255,0.96));   text-shadow: var(--ai-sh, 0 1px 2px rgba(0,0,0,0.30)); }
-  .message.right span { color: var(--user-fg, rgba(255,255,255,0.96)); text-shadow: var(--user-sh, 0 1px 2px rgba(0,0,0,0.30)); }
 
   .message span strong { font-weight: 700; }
   .message span em { font-style: italic; }
@@ -154,8 +143,7 @@
   .typing i:nth-child(3) { animation-delay: 0.4s; }
 
   /* ===== 输入栏 ===== */
-  /* 悬浮在消息层之上：消息从它下面滚过 → 输入框玻璃折射真实滚动内容 */
-  .composer { position: absolute; bottom: 0; left: 0; right: 0; z-index: 4; padding: 10px 14px calc(2px + env(safe-area-inset-bottom)); }
+  .composer { position: relative; z-index: 2; padding: 10px 14px calc(2px + env(safe-area-inset-bottom)); }
   .attach-strip { display: flex; gap: 8px; padding: 0 4px 8px; overflow-x: auto; }
   .attach-strip::-webkit-scrollbar { height: 0; }
   .attach-thumb { position: relative; width: 56px; height: 56px; flex-shrink: 0; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.25); }
@@ -587,6 +575,7 @@
         <label>透明度 <output id="v-trans"></output><input type="range" id="r-trans" min="0" max="1" step="0.01"></label>
         <label>自适应对比 <output id="v-contrast"></output><input type="range" id="r-contrast" min="0" max="1.5" step="0.01"></label>
         <label>阴影分离 <output id="v-shadow"></output><input type="range" id="r-shadow" min="0" max="1" step="0.01"></label>
+        <label>体积光 <output id="v-vol"></output><input type="range" id="r-vol" min="0" max="0.5" step="0.01"></label>
         <label>迎光边缘 <output id="v-glow"></output><input type="range" id="r-glow" min="0" max="0.9" step="0.01"></label>
         <label>玻璃染色 <output id="v-tint"></output><input type="range" id="r-tint" min="0" max="0.3" step="0.01"></label>
         <label>玻璃模糊 <output id="v-glassBlur"></output><input type="range" id="r-glassBlur" min="0" max="12" step="1"></label>
@@ -693,6 +682,8 @@ void main(){
     vec2 g = normalize(vec2(sceneD(p+vec2(e,0.))-sceneD(p-vec2(e,0.)),
                             sceneD(p+vec2(0.,e))-sceneD(p-vec2(0.,e))) + 1e-6);
     float dIn = -d;                                  // 形状内部为正
+    vec2 hf = max(rct.zw, vec2(1.0));
+    vec2 lp = (p - rct.xy) / hf;                      // 气泡内归一化坐标 [-1,1]
     vec2 Ldir = normalize(vec2(-0.55, -0.83));        // 光来自左上
 
     // ① 透镜折射：uEdge 是固定物理厚度(px)，材质随气泡大小自然变化(与 lab 一致，无额外衰减)
@@ -721,7 +712,12 @@ void main(){
     vec3 adapt = Lb > 0.5 ? vec3(0.05, 0.06, 0.08) : vec3(0.97, 0.98, 1.0);
     glass = mix(glass, adapt, clamp(uContrast, 0.0, 1.5) * 0.20);
 
-    // ④ 方向性边缘：迎光侧(左上)细亮边，背光侧(右下)内暗边 → 有厚度、不是均匀白圈
+    // ④ 内部体积光：左上方一团柔和高光(像光透进玻璃体)，绝非发光描边
+    vec2 hp = lp - vec2(-0.42, -0.5);
+    float vol = exp(-dot(hp, hp) * 1.5) * smoothstep(0.0, 7.0, dIn);
+    glass += vec3(1.0) * vol * uVol;
+
+    // ⑤ 方向性边缘：迎光侧(左上)细亮边，背光侧(右下)内暗边 → 有厚度、不是均匀白圈
     float rimHi = pow(1.0 - smoothstep(0.0, 5.0, dIn), 1.7);
     float ndl = dot(g, Ldir);                         // >0 迎光, <0 背光
     glass += vec3(1.0) * rimHi * max(ndl, 0.0) * uGlow;     // 迎光亮边
@@ -770,17 +766,6 @@ function hexToVec(h){
 }
 let colAIv = hexToVec(colors.ai), colUserv = hexToVec(colors.user);
 const colNeutralv = hexToVec('#2a323d');
-// 气泡文字明暗自适应(气泡现在有真实色块底，需保证可读)
-function applyBubbleFg(){
-  const s = document.documentElement.style;
-  [['ai', colors.ai], ['user', colors.user]].forEach(([k, hex]) => {
-    const v = hexToVec(hex), lum = 0.299*v[0] + 0.587*v[1] + 0.114*v[2];
-    const light = lum > 0.62;
-    s.setProperty('--'+k+'-fg', light ? 'rgba(20,22,28,0.94)' : 'rgba(255,255,255,0.96)');
-    s.setProperty('--'+k+'-sh', light ? 'none' : '0 1px 2px rgba(0,0,0,0.30)');
-  });
-}
-applyBubbleFg();
 const colorId = el => { const c = el.dataset.color; return c === 'ai' ? 0.0 : c === 'user' ? 1.0 : 2.0; };
 
 function setBubbleVars(){
@@ -857,7 +842,6 @@ function computeTheme(){
   rs.setProperty('--set-accent', `rgb(${ac(r)},${ac(g)},${ac(b)})`);
 }
 function updateTexture(){ if(!gl) return;
-  invalidateBase();   // 壁纸变了 → 让 composeScene 重建底图
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, buildBackground(canvas.width, canvas.height));
   computeTheme();
@@ -879,54 +863,8 @@ function resize(){
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, buildBackground(w, h));
   computeTheme();
 }
-/* ===== 真实背景合成：把壁纸 + 实时滚动的消息内容画进一张纹理，供玻璃折射 =====
-   这样玻璃折射的是「玻璃后方真实、会动的内容」，而不是静态壁纸(方案 B)。 */
-const sceneCanvas = document.createElement('canvas');
-const sceneCtx = sceneCanvas.getContext('2d');
-let baseCanvas = null;   // 壁纸底图(缓存，换壁纸/尺寸变化才重建)
-function invalidateBase(){ baseCanvas = null; }
-function roundRectPath(x, X, Y, W, H, r){
-  r = Math.min(r, W/2, H/2);
-  x.beginPath();
-  x.moveTo(X+r, Y); x.arcTo(X+W, Y, X+W, Y+H, r); x.arcTo(X+W, Y+H, X, Y+H, r);
-  x.arcTo(X, Y+H, X, Y, r); x.arcTo(X, Y, X+W, Y, r); x.closePath();
-}
-function hexA(h, a){ const v = hexToVec(h); return 'rgba('+Math.round(v[0]*255)+','+Math.round(v[1]*255)+','+Math.round(v[2]*255)+','+a+')'; }
-function composeScene(){
-  // 纹理分辨率：设备像素，最长边封顶 ~1000 保性能(折射本身会柔化，不需要满分辨率)
-  const scale = Math.min(1, 1000 / Math.max(canvas.width, canvas.height, 1));
-  const w = Math.max(2, Math.round(canvas.width*scale)), h = Math.max(2, Math.round(canvas.height*scale));
-  if(sceneCanvas.width !== w || sceneCanvas.height !== h){ sceneCanvas.width = w; sceneCanvas.height = h; baseCanvas = null; }
-  if(!baseCanvas) baseCanvas = renderScene(w, h);
-  const x = sceneCtx;
-  x.clearRect(0, 0, w, h);
-  x.drawImage(baseCanvas, 0, 0);
-  const pr = phone.getBoundingClientRect();
-  if(pr.width < 2) return;
-  const sx = w / pr.width, sy = h / pr.height;
-  // 1) 消息气泡 → 真实色块(用配色，跟随滚动)。这是输入框/顶栏折射到的"后方内容"
-  phone.querySelectorAll('.messages .message').forEach(el => {
-    const r = el.getBoundingClientRect();
-    if(r.bottom < pr.top || r.top > pr.bottom || r.width < 2) return;
-    const X = (r.left-pr.left)*sx, Y = (r.top-pr.top)*sy, W = r.width*sx, H = r.height*sy;
-    const col = el.dataset.color === 'user' ? colors.user : colors.ai;
-    roundRectPath(x, X, Y, W, H, Math.min(W, H)*0.45); x.fillStyle = hexA(col, 0.62); x.fill();
-  });
-  // 2) 消息里的图片/表情(仅 data: 内联图，避免跨域污染画布导致上传失败)
-  phone.querySelectorAll('.messages img').forEach(im => {
-    if(!/^data:/.test(im.src) || !im.complete || !im.naturalWidth) return;
-    const r = im.getBoundingClientRect();
-    if(r.bottom < pr.top || r.top > pr.bottom || r.width < 2) return;
-    const X = (r.left-pr.left)*sx, Y = (r.top-pr.top)*sy, W = r.width*sx, H = r.height*sy;
-    try { x.save(); roundRectPath(x, X, Y, W, H, 6*sx); x.clip(); x.drawImage(im, X, Y, W, H); x.restore(); } catch(e){ x.restore(); }
-  });
-}
 function frame(){
   resize();
-  // 每帧把「真实背景 + 内容」刷进纹理 → 玻璃折射真实的、会动的后方内容
-  composeScene();
-  gl.bindTexture(gl.TEXTURE_2D, tex);
-  try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sceneCanvas); } catch(e){}
   const pr = phone.getBoundingClientRect();
   const els = phone.querySelectorAll('.glass');
   const rects = new Float32Array(MAX*4), metas = new Float32Array(MAX*2); let n = 0;
@@ -1162,7 +1100,7 @@ document.getElementById('font-reset').addEventListener('click', () => {
 try { const sf = localStorage.getItem('lg-font'); if(sf) applyFont(sf); } catch(e){}
 
 /* ===== 滑块 ===== */
-const KEYS = ['strength','edge','rimPow','chroma','trans','contrast','shadow','glow','tint','glassBlur','scale','bubRadius','bubPadX','bubPadY','bubMaxW'];
+const KEYS = ['strength','edge','rimPow','chroma','trans','contrast','shadow','vol','glow','tint','glassBlur','scale','bubRadius','bubPadX','bubPadY','bubMaxW'];
 const INT = { strength:1, edge:1, glassBlur:1, bubRadius:1, bubPadX:1, bubPadY:1, bubMaxW:1 };
 const fmt = (k,v) => k==='scale' ? v.toFixed(2)+'×' : INT[k] ? Math.round(v) : (k==='rimPow') ? v.toFixed(1) : v.toFixed(2);
 function syncPanel(){ KEYS.forEach(k => { document.getElementById('r-'+k).value = params[k]; document.getElementById('v-'+k).textContent = fmt(k, params[k]); }); }
@@ -1177,8 +1115,8 @@ const saveColors = () => { try { localStorage.setItem('lg-colors', JSON.stringif
 const colAiInput = document.getElementById('col-ai');
 const colUserInput = document.getElementById('col-user');
 colAiInput.value = colors.ai; colUserInput.value = colors.user;
-colAiInput.addEventListener('input', (e) => { colors.ai = e.target.value; colAIv = hexToVec(colors.ai); applyBubbleFg(); saveColors(); });
-colUserInput.addEventListener('input', (e) => { colors.user = e.target.value; colUserv = hexToVec(colors.user); applyBubbleFg(); saveColors(); });
+colAiInput.addEventListener('input', (e) => { colors.ai = e.target.value; colAIv = hexToVec(colors.ai); saveColors(); });
+colUserInput.addEventListener('input', (e) => { colors.user = e.target.value; colUserv = hexToVec(colors.user); saveColors(); });
 
 /* ===== 聊天逻辑 ===== */
 const FAKE_REPLIES = [
@@ -1190,22 +1128,6 @@ const FAKE_REPLIES = [
 const messagesEl = document.getElementById('messages');
 const inputEl = document.getElementById('input');
 const sendEl = document.getElementById('send');
-
-// 顶栏/输入框现在悬浮在消息之上：给消息区留出等高的上下内边距，
-// 让首/末条不被遮住，但滚动时内容仍从两条玻璃下面穿过(供其折射)
-const topbarEl = document.querySelector('.topbar');
-const composerEl = document.querySelector('.composer');
-function syncBarsPad(){
-  if(topbarEl) messagesEl.style.paddingTop = (topbarEl.offsetHeight + 6) + 'px';
-  if(composerEl) messagesEl.style.paddingBottom = (composerEl.offsetHeight + 8) + 'px';
-}
-if(window.ResizeObserver){
-  const ro = new ResizeObserver(syncBarsPad);
-  if(topbarEl) ro.observe(topbarEl);
-  if(composerEl) ro.observe(composerEl);
-}
-window.addEventListener('resize', syncBarsPad);
-syncBarsPad();
 let typing = false;
 const scrollDown = () => messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior: 'smooth' });
 
