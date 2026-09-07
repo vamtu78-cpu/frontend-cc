@@ -132,6 +132,9 @@
     color: rgba(255,255,255,0.96);
     text-shadow: 0 1px 2px rgba(0,0,0,0.30);
   }
+  /* 文字明暗跟随气泡配色亮度自适应，保证在真实色块上可读 */
+  .message.left  span { color: var(--ai-fg, rgba(255,255,255,0.96));   text-shadow: var(--ai-sh, 0 1px 2px rgba(0,0,0,0.30)); }
+  .message.right span { color: var(--user-fg, rgba(255,255,255,0.96)); text-shadow: var(--user-sh, 0 1px 2px rgba(0,0,0,0.30)); }
 
   .message span strong { font-weight: 700; }
   .message span em { font-style: italic; }
@@ -780,6 +783,17 @@ function hexToVec(h){
 }
 let colAIv = hexToVec(colors.ai), colUserv = hexToVec(colors.user);
 const colNeutralv = hexToVec('#2a323d');
+// 气泡文字明暗自适应(气泡现在有真实色块底，需保证可读)
+function applyBubbleFg(){
+  const s = document.documentElement.style;
+  [['ai', colors.ai], ['user', colors.user]].forEach(([k, hex]) => {
+    const v = hexToVec(hex), lum = 0.299*v[0] + 0.587*v[1] + 0.114*v[2];
+    const light = lum > 0.62;
+    s.setProperty('--'+k+'-fg', light ? 'rgba(20,22,28,0.94)' : 'rgba(255,255,255,0.96)');
+    s.setProperty('--'+k+'-sh', light ? 'none' : '0 1px 2px rgba(0,0,0,0.30)');
+  });
+}
+applyBubbleFg();
 const colorId = el => { const c = el.dataset.color; return c === 'ai' ? 0.0 : c === 'user' ? 1.0 : 2.0; };
 
 function setBubbleVars(){
@@ -856,6 +870,7 @@ function computeTheme(){
   rs.setProperty('--set-accent', `rgb(${ac(r)},${ac(g)},${ac(b)})`);
 }
 function updateTexture(){ if(!gl) return;
+  invalidateBase();   // 壁纸变了 → 让 composeScene 重建底图
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, buildBackground(canvas.width, canvas.height));
   computeTheme();
@@ -877,8 +892,54 @@ function resize(){
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, buildBackground(w, h));
   computeTheme();
 }
+/* ===== 真实背景合成：把壁纸 + 实时滚动的消息内容画进一张纹理，供玻璃折射 =====
+   这样玻璃折射的是「玻璃后方真实、会动的内容」，而不是静态壁纸(方案 B)。 */
+const sceneCanvas = document.createElement('canvas');
+const sceneCtx = sceneCanvas.getContext('2d');
+let baseCanvas = null;   // 壁纸底图(缓存，换壁纸/尺寸变化才重建)
+function invalidateBase(){ baseCanvas = null; }
+function roundRectPath(x, X, Y, W, H, r){
+  r = Math.min(r, W/2, H/2);
+  x.beginPath();
+  x.moveTo(X+r, Y); x.arcTo(X+W, Y, X+W, Y+H, r); x.arcTo(X+W, Y+H, X, Y+H, r);
+  x.arcTo(X, Y+H, X, Y, r); x.arcTo(X, Y, X+W, Y, r); x.closePath();
+}
+function hexA(h, a){ const v = hexToVec(h); return 'rgba('+Math.round(v[0]*255)+','+Math.round(v[1]*255)+','+Math.round(v[2]*255)+','+a+')'; }
+function composeScene(){
+  // 纹理分辨率：设备像素，最长边封顶 ~1000 保性能(折射本身会柔化，不需要满分辨率)
+  const scale = Math.min(1, 1000 / Math.max(canvas.width, canvas.height, 1));
+  const w = Math.max(2, Math.round(canvas.width*scale)), h = Math.max(2, Math.round(canvas.height*scale));
+  if(sceneCanvas.width !== w || sceneCanvas.height !== h){ sceneCanvas.width = w; sceneCanvas.height = h; baseCanvas = null; }
+  if(!baseCanvas) baseCanvas = renderScene(w, h);
+  const x = sceneCtx;
+  x.clearRect(0, 0, w, h);
+  x.drawImage(baseCanvas, 0, 0);
+  const pr = phone.getBoundingClientRect();
+  if(pr.width < 2) return;
+  const sx = w / pr.width, sy = h / pr.height;
+  // 1) 消息气泡 → 真实色块(用配色，跟随滚动)。这是输入框/顶栏折射到的"后方内容"
+  phone.querySelectorAll('.messages .message').forEach(el => {
+    const r = el.getBoundingClientRect();
+    if(r.bottom < pr.top || r.top > pr.bottom || r.width < 2) return;
+    const X = (r.left-pr.left)*sx, Y = (r.top-pr.top)*sy, W = r.width*sx, H = r.height*sy;
+    const col = el.dataset.color === 'user' ? colors.user : colors.ai;
+    roundRectPath(x, X, Y, W, H, Math.min(W, H)*0.45); x.fillStyle = hexA(col, 0.62); x.fill();
+  });
+  // 2) 消息里的图片/表情(仅 data: 内联图，避免跨域污染画布导致上传失败)
+  phone.querySelectorAll('.messages img').forEach(im => {
+    if(!/^data:/.test(im.src) || !im.complete || !im.naturalWidth) return;
+    const r = im.getBoundingClientRect();
+    if(r.bottom < pr.top || r.top > pr.bottom || r.width < 2) return;
+    const X = (r.left-pr.left)*sx, Y = (r.top-pr.top)*sy, W = r.width*sx, H = r.height*sy;
+    try { x.save(); roundRectPath(x, X, Y, W, H, 6*sx); x.clip(); x.drawImage(im, X, Y, W, H); x.restore(); } catch(e){ x.restore(); }
+  });
+}
 function frame(){
   resize();
+  // 每帧把「真实背景 + 内容」刷进纹理 → 玻璃折射真实的、会动的后方内容
+  composeScene();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sceneCanvas); } catch(e){}
   const pr = phone.getBoundingClientRect();
   const els = phone.querySelectorAll('.glass');
   const rects = new Float32Array(MAX*4), metas = new Float32Array(MAX*2); let n = 0;
@@ -1129,8 +1190,8 @@ const saveColors = () => { try { localStorage.setItem('lg-colors', JSON.stringif
 const colAiInput = document.getElementById('col-ai');
 const colUserInput = document.getElementById('col-user');
 colAiInput.value = colors.ai; colUserInput.value = colors.user;
-colAiInput.addEventListener('input', (e) => { colors.ai = e.target.value; colAIv = hexToVec(colors.ai); saveColors(); });
-colUserInput.addEventListener('input', (e) => { colors.user = e.target.value; colUserv = hexToVec(colors.user); saveColors(); });
+colAiInput.addEventListener('input', (e) => { colors.ai = e.target.value; colAIv = hexToVec(colors.ai); applyBubbleFg(); saveColors(); });
+colUserInput.addEventListener('input', (e) => { colors.user = e.target.value; colUserv = hexToVec(colors.user); applyBubbleFg(); saveColors(); });
 
 /* ===== 聊天逻辑 ===== */
 const FAKE_REPLIES = [
