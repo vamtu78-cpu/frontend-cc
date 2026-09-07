@@ -56,7 +56,8 @@
 
   /* ===== 顶栏 ===== */
   .topbar {
-    position: relative; z-index: 4;
+    /* 悬浮在消息层之上：消息从它下面滚过，玻璃才能折射到真实内容(Apple 悬浮玻璃条) */
+    position: absolute; top: 0; left: 0; right: 0; z-index: 4;
     display: flex; align-items: center; justify-content: space-between;
     gap: 8px;
     /* 顶部叠加安全区，避开灵动岛/状态栏 */
@@ -160,7 +161,8 @@
   .typing i:nth-child(3) { animation-delay: 0.4s; }
 
   /* ===== 输入栏 ===== */
-  .composer { position: relative; z-index: 2; padding: 10px 14px calc(2px + env(safe-area-inset-bottom)); }
+  /* 悬浮在消息层之上：消息从它下面滚过 → 输入框玻璃折射真实滚动内容 */
+  .composer { position: absolute; bottom: 0; left: 0; right: 0; z-index: 4; padding: 10px 14px calc(2px + env(safe-area-inset-bottom)); }
   .attach-strip { display: flex; gap: 8px; padding: 0 4px 8px; overflow-x: auto; }
   .attach-strip::-webkit-scrollbar { height: 0; }
   .attach-thumb { position: relative; width: 56px; height: 56px; flex-shrink: 0; border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,0.25); }
@@ -1203,6 +1205,22 @@ const FAKE_REPLIES = [
 const messagesEl = document.getElementById('messages');
 const inputEl = document.getElementById('input');
 const sendEl = document.getElementById('send');
+
+// 顶栏/输入框现在悬浮在消息之上：给消息区留出等高的上下内边距，
+// 让首/末条不被遮住，但滚动时内容仍从两条玻璃下面穿过(供其折射)
+const topbarEl = document.querySelector('.topbar');
+const composerEl = document.querySelector('.composer');
+function syncBarsPad(){
+  if(topbarEl) messagesEl.style.paddingTop = (topbarEl.offsetHeight + 6) + 'px';
+  if(composerEl) messagesEl.style.paddingBottom = (composerEl.offsetHeight + 8) + 'px';
+}
+if(window.ResizeObserver){
+  const ro = new ResizeObserver(syncBarsPad);
+  if(topbarEl) ro.observe(topbarEl);
+  if(composerEl) ro.observe(composerEl);
+}
+window.addEventListener('resize', syncBarsPad);
+syncBarsPad();
 let typing = false;
 const scrollDown = () => messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior: 'smooth' });
 
