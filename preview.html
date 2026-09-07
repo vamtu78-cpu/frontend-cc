@@ -587,7 +587,6 @@
         <label>透明度 <output id="v-trans"></output><input type="range" id="r-trans" min="0" max="1" step="0.01"></label>
         <label>自适应对比 <output id="v-contrast"></output><input type="range" id="r-contrast" min="0" max="1.5" step="0.01"></label>
         <label>阴影分离 <output id="v-shadow"></output><input type="range" id="r-shadow" min="0" max="1" step="0.01"></label>
-        <label>体积光 <output id="v-vol"></output><input type="range" id="r-vol" min="0" max="0.5" step="0.01"></label>
         <label>迎光边缘 <output id="v-glow"></output><input type="range" id="r-glow" min="0" max="0.9" step="0.01"></label>
         <label>玻璃染色 <output id="v-tint"></output><input type="range" id="r-tint" min="0" max="0.3" step="0.01"></label>
         <label>玻璃模糊 <output id="v-glassBlur"></output><input type="range" id="r-glassBlur" min="0" max="12" step="1"></label>
@@ -694,8 +693,6 @@ void main(){
     vec2 g = normalize(vec2(sceneD(p+vec2(e,0.))-sceneD(p-vec2(e,0.)),
                             sceneD(p+vec2(0.,e))-sceneD(p-vec2(0.,e))) + 1e-6);
     float dIn = -d;                                  // 形状内部为正
-    vec2 hf = max(rct.zw, vec2(1.0));
-    vec2 lp = (p - rct.xy) / hf;                      // 气泡内归一化坐标 [-1,1]
     vec2 Ldir = normalize(vec2(-0.55, -0.83));        // 光来自左上
 
     // ① 透镜折射：uEdge 是固定物理厚度(px)，材质随气泡大小自然变化(与 lab 一致，无额外衰减)
@@ -724,12 +721,7 @@ void main(){
     vec3 adapt = Lb > 0.5 ? vec3(0.05, 0.06, 0.08) : vec3(0.97, 0.98, 1.0);
     glass = mix(glass, adapt, clamp(uContrast, 0.0, 1.5) * 0.20);
 
-    // ④ 内部体积光：左上方一团柔和高光(像光透进玻璃体)，绝非发光描边
-    vec2 hp = lp - vec2(-0.42, -0.5);
-    float vol = exp(-dot(hp, hp) * 1.5) * smoothstep(0.0, 7.0, dIn);
-    glass += vec3(1.0) * vol * uVol;
-
-    // ⑤ 方向性边缘：迎光侧(左上)细亮边，背光侧(右下)内暗边 → 有厚度、不是均匀白圈
+    // ④ 方向性边缘：迎光侧(左上)细亮边，背光侧(右下)内暗边 → 有厚度、不是均匀白圈
     float rimHi = pow(1.0 - smoothstep(0.0, 5.0, dIn), 1.7);
     float ndl = dot(g, Ldir);                         // >0 迎光, <0 背光
     glass += vec3(1.0) * rimHi * max(ndl, 0.0) * uGlow;     // 迎光亮边
@@ -1170,7 +1162,7 @@ document.getElementById('font-reset').addEventListener('click', () => {
 try { const sf = localStorage.getItem('lg-font'); if(sf) applyFont(sf); } catch(e){}
 
 /* ===== 滑块 ===== */
-const KEYS = ['strength','edge','rimPow','chroma','trans','contrast','shadow','vol','glow','tint','glassBlur','scale','bubRadius','bubPadX','bubPadY','bubMaxW'];
+const KEYS = ['strength','edge','rimPow','chroma','trans','contrast','shadow','glow','tint','glassBlur','scale','bubRadius','bubPadX','bubPadY','bubMaxW'];
 const INT = { strength:1, edge:1, glassBlur:1, bubRadius:1, bubPadX:1, bubPadY:1, bubMaxW:1 };
 const fmt = (k,v) => k==='scale' ? v.toFixed(2)+'×' : INT[k] ? Math.round(v) : (k==='rimPow') ? v.toFixed(1) : v.toFixed(2);
 function syncPanel(){ KEYS.forEach(k => { document.getElementById('r-'+k).value = params[k]; document.getElementById('v-'+k).textContent = fmt(k, params[k]); }); }
