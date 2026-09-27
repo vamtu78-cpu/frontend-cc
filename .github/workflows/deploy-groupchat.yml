@@ -27,16 +27,7 @@ jobs:
             echo "::notice::还没添加 Secret「GROUPCHAT_CONFIG」，先跳过部署（见 groupchat/README.md）"
             echo "skip=1" >> "$GITHUB_OUTPUT"; exit 0
           fi
-          node -e '
-            let c;
-            try { c = JSON.parse(process.env.GROUPCHAT_CONFIG); }
-            catch(e){ console.log("::error::GROUPCHAT_CONFIG 格式不对（多半是少了逗号/引号）：" + e.message); process.exit(1); }
-            if(!c.roomPassword){ console.log("::error::roomPassword（房间口令）不能为空"); process.exit(1); }
-            if(!Array.isArray(c.bots) || !c.bots.length){ console.log("::error::bots 里至少要有一个 AI"); process.exit(1); }
-            for(const b of c.bots) for(const k of ["name","baseUrl","apiKey","model"])
-              if(!b[k]){ console.log(`::error::AI「${b.name||"?"}」缺少 ${k}`); process.exit(1); }
-            console.log("配置 OK：AI = " + c.bots.map(b => b.name).join("、"));
-          '
+          node scripts/groupchat-check-config.mjs "$RUNNER_TEMP/groupchat-config.json"
 
       - name: 部署到 VPS
         if: steps.check.outputs.skip != '1'
@@ -46,7 +37,6 @@ jobs:
           SSH_USER: ${{ secrets.SSH_USER }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
           TARGET_DIR: ${{ secrets.TARGET_DIR }}
-          GROUPCHAT_CONFIG: ${{ secrets.GROUPCHAT_CONFIG }}
         run: |
           set -e
           PORT="${SSH_PORT:-22}"
@@ -60,5 +50,5 @@ jobs:
           $SSH "$S mkdir -p /opt/groupchat/data && $S chown -R \$(id -u) /opt/groupchat"
           rsync -az --delete --exclude data --exclude node --exclude config.json --exclude '*.bak' \
             -e "ssh -p $PORT -i ~/.ssh/id_key" groupchat/server.js groupchat/public "$SSH_USER@$SSH_HOST:/opt/groupchat/"
-          printf '%s' "$GROUPCHAT_CONFIG" | $SSH "umask 077 && cat > /opt/groupchat/config.json"
+          $SSH "umask 077 && cat > /opt/groupchat/config.json" < "$RUNNER_TEMP/groupchat-config.json"
           $SSH "SITE_DIR='${TARGET_DIR:-/var/www/liquid-chat}' bash -s" < scripts/groupchat-remote.sh
