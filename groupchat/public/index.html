@@ -30,7 +30,9 @@
   .dot{width:8px;height:8px;border-radius:50%;background:#555;flex:none}
   .dot.on{background:#4ade80;box-shadow:0 0 8px #4ade80}
 
-  #list{flex:1;overflow-y:auto;padding:16px 16px 8px;display:flex;flex-direction:column;gap:14px;-webkit-overflow-scrolling:touch}
+  #list{flex:1;overflow-y:auto;padding:16px 16px 0;-webkit-overflow-scrolling:touch}
+  #msgs{position:relative;overflow:hidden;display:flex;flex-direction:column;gap:14px;padding-bottom:20px}
+  #msgs>.row,#msgs>.time{position:relative;z-index:1}
   .row{display:flex;gap:8px;align-items:flex-start;max-width:100%}
   .row.me{flex-direction:row-reverse}
   .avatar{width:34px;height:34px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:16px;font-weight:600;color:#fff}
@@ -73,8 +75,9 @@
   #menu hr{border:none;border-top:1px solid var(--line);margin:4px 8px}
   #menu .note{font-size:11px;color:var(--muted);padding:0 14px 6px}
   /* 液态玻璃：气泡本身透明，玻璃由背后的 WebGL 画布绘制 */
-  #gl{position:fixed;inset:0;width:100%;height:100%;z-index:-1;display:none}
-  body.lg #gl{display:block}
+  #bg{position:fixed;inset:0;width:100%;height:100%;z-index:-1;display:none}
+  #gl{position:absolute;left:0;top:0;z-index:0;pointer-events:none}
+  body.lg #bg{display:block}
   body.lg #wall{display:none}
   body.lg .bubble,body.lg .row.me .bubble,body.lg .row.bot .bubble{
     background:transparent;border:none;border-radius:var(--br,23px);padding:var(--py,9px) var(--px,20px);
@@ -99,7 +102,7 @@
 </style>
 </head>
 <body>
-<canvas id="gl"></canvas>
+<canvas id="bg"></canvas>
 <div id="wall"></div>
 <div class="app">
   <header class="glass">
@@ -108,7 +111,7 @@
     <span class="members" id="members"></span>
     <button id="menuBtn" aria-label="设置">⚙️</button>
   </header>
-  <div id="list"></div>
+  <div id="list"><div id="msgs"></div></div>
   <footer class="glass">
     <div class="chips" id="chips"></div>
     <div class="input">
@@ -143,7 +146,7 @@ let me = store.get('gc-name'), key = store.get('gc-key');
 let bots = [], es = null;
 let avatars = { humans: {}, bots: {} };   // 服务器同步，所有人可见
 const els = new Map();   // 消息 id → {row, bubble}
-const list = $('#list');
+const list = $('#list'), msgs = $('#msgs');
 
 const PALETTE = ['#ff8fab','#7cc6fe','#ffd166','#80ed99','#c77dff','#ff9f68'];
 function colorOf(name){ let h = 0; for(const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0; return PALETTE[h % PALETTE.length]; }
@@ -167,7 +170,7 @@ function render(m){
     const t = document.createElement('div');
     t.className = 'time';
     t.textContent = new Date(m.ts).toLocaleString('zh-CN', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
-    list.appendChild(t);
+    msgs.appendChild(t);
   }
   lastTs = m.ts;
   const bot = bots.find(b => b.id === m.botId);
@@ -187,7 +190,7 @@ function render(m){
   const bubble = row.querySelector('.bubble');
   els.set(m.id, { row, bubble, text: m.text || '' });
   if(!styles[row.dataset.sk] && !geomSheet.textContent.includes(row.dataset.sk)) applyGeometry();
-  list.appendChild(row);
+  msgs.appendChild(row);
   update(m);
 }
 function update(m){
@@ -244,7 +247,7 @@ const MAXB = 48, MAXS = 8;
 const VERT = `attribute vec2 a; void main(){ gl_Position = vec4(a,0.0,1.0); }`;
 const FRAG = `
 precision highp float;
-uniform vec2 uRes; uniform sampler2D uTex; uniform int uCount; uniform vec2 uClip;
+uniform vec2 uRes; uniform sampler2D uTex; uniform int uCount; uniform vec2 uOrigin; uniform vec2 uView;
 uniform vec4 uRect[${MAXB}]; uniform vec2 uMeta[${MAXB}];
 uniform vec4 uS0[${MAXS}]; uniform vec4 uS1[${MAXS}]; uniform vec4 uS2[${MAXS}]; uniform vec3 uSC[${MAXS}];
 float sdRound(vec2 p, vec2 c, vec2 hw, float r){
@@ -260,7 +263,8 @@ float scene(vec2 p, out float sid, out vec4 rct, out float rad){
   return d;
 }
 float sceneD(vec2 p){ float s; vec4 rr; float rd; return scene(p,s,rr,rd); }
-vec3 bg(vec2 p){ return texture2D(uTex, vec2(p.x/uRes.x, p.y/uRes.y)).rgb; }
+// p 是画布内坐标；背景按它在屏幕上的位置取样，和固定背景对得上
+vec3 bg(vec2 p){ return texture2D(uTex, (p + uOrigin) / uView).rgb; }
 vec3 bgB(vec2 p, float rad){
   vec3 s = bg(p);
   if(rad > 0.5){
@@ -273,8 +277,6 @@ vec3 bgB(vec2 p, float rad){
 }
 void main(){
   vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
-  vec3 col = bg(p);
-  if(p.y < uClip.x || p.y > uClip.y){ gl_FragColor = vec4(col, 1.0); return; }
   float sid; vec4 rct; float rad; float d = scene(p, sid, rct, rad);
   // 取这个气泡主人的那套参数
   vec4 A = uS0[0]; vec4 B = uS1[0]; vec4 C = uS2[0]; vec3 T = uSC[0];
@@ -283,10 +285,12 @@ void main(){
   float uGlow = B.x, uTint = B.y, uBlur = B.z, uTrans = B.w;
   float uVol = C.x, uContrast = C.y, uShadow = C.z;
 
+  // 画布是透明的：只画玻璃本体和它投下的阴影（黑色半透明）
+  vec4 outc = vec4(0.0);
   if(d > 0.0 && uShadow > 0.001){
     float dS = sdRound(p - vec2(5.0, 8.0), rct.xy, rct.zw, rad);
     float shadow = uShadow * smoothstep(20.0, 0.0, dS) * smoothstep(-1.0, 6.0, d);
-    col = mix(col, col * 0.55, shadow * 0.6);
+    outc = vec4(0.0, 0.0, 0.0, shadow * 0.6 * 0.45);
   }
   float alpha = smoothstep(1.6, -1.6, d);
   if(alpha > 0.001){
@@ -320,12 +324,14 @@ void main(){
     glass *= 1.0 - rimHi * max(-ndl, 0.0) * 0.30;
     float spec = pow(max(ndl, 0.0), 22.0) * rimHi;
     glass += vec3(1.0) * spec * 0.35;
-    col = mix(col, glass, alpha);
+    outc = vec4(mix(outc.rgb, glass, alpha), max(outc.a, alpha));
   }
-  gl_FragColor = vec4(col, 1.0);
+  gl_FragColor = outc;
 }`;
 
-const canvas = $('#gl');
+const canvas = document.createElement('canvas'); canvas.id = 'gl';
+const bgCanvas = $('#bg');
+const MARGIN = 240;              // 玻璃画布比可视区上下各多画一截，快速滑动时新进来的气泡也有玻璃
 let gl = null, glOn = false, loc = {}, tex, glDirty = true, lastSig = '';
 const dpr = Math.min(devicePixelRatio || 1, 2);
 let wallImg = null;
@@ -335,7 +341,7 @@ function hexToVec(h){ const n = parseInt(h.slice(1), 16); return [((n>>16)&255)/
 function compile(t, src){ const sh = gl.createShader(t); gl.shaderSource(sh, src); gl.compileShader(sh);
   if(!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh)); return sh; }
 function initGL(){
-  gl = canvas.getContext('webgl', { premultipliedAlpha:false, antialias:true });
+  gl = canvas.getContext('webgl', { premultipliedAlpha:false, alpha:true, antialias:true });
   if(!gl) return false;
   const prog = gl.createProgram();
   gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
@@ -346,7 +352,7 @@ function initGL(){
   const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
   const a = gl.getAttribLocation(prog, 'a'); gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a,2,gl.FLOAT,false,0,0);
-  ['uRes','uTex','uCount','uClip'].forEach(n => loc[n] = gl.getUniformLocation(prog, n));
+  ['uRes','uTex','uCount','uOrigin','uView'].forEach(n => loc[n] = gl.getUniformLocation(prog, n));
   ['uRect','uMeta','uS0','uS1','uS2','uSC'].forEach(n => loc[n] = gl.getUniformLocation(prog, n + '[0]'));
   tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -375,10 +381,13 @@ function buildScene(w, h){
   });
   return c;
 }
+// 同一张场景图：固定背景画布显示它，玻璃着色器折射它
 function uploadTexture(){
-  if(!glOn) return;
+  if(!glOn || !bgCanvas.width) return;
+  const scene = buildScene(bgCanvas.width, bgCanvas.height);
+  bgCanvas.getContext('2d').drawImage(scene, 0, 0);
   gl.bindTexture(gl.TEXTURE_2D, tex);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, buildScene(canvas.width, canvas.height));
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, scene);
   glDirty = true;
 }
 function setGlassWallpaper(src){
@@ -406,40 +415,49 @@ function slot(sk){
   return slotOf.get(sk);
 }
 function resizeGL(){
-  const w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
-  if(!w || !h || (canvas.width === w && canvas.height === h)) return;
-  canvas.width = w; canvas.height = h; gl.viewport(0, 0, w, h);
-  gl.uniform2f(loc.uRes, w, h);
-  uploadTexture();
+  const vw = Math.round(bgCanvas.clientWidth * dpr), vh = Math.round(bgCanvas.clientHeight * dpr);
+  if(vw && vh && (bgCanvas.width !== vw || bgCanvas.height !== vh)){
+    bgCanvas.width = vw; bgCanvas.height = vh; gl.uniform2f(loc.uView, vw, vh); uploadTexture();
+  }
+  const cw = msgs.clientWidth, ch = list.clientHeight + 2 * MARGIN;
+  const w = Math.round(cw * dpr), h = Math.round(ch * dpr);
+  if(w && h && (canvas.width !== w || canvas.height !== h)){
+    canvas.width = w; canvas.height = h; canvas.style.width = cw + 'px'; canvas.style.height = ch + 'px';
+    gl.viewport(0, 0, w, h); gl.uniform2f(loc.uRes, w, h); glDirty = true;
+  }
 }
 function frame(){
   resizeGL();
-  const lr = list.getBoundingClientRect();
+  // 玻璃画布放在消息里一起滚动：两帧之间系统滚动时，玻璃和文字是一起移动的，不会分离
+  const lr = list.getBoundingClientRect(), mr = msgs.getBoundingClientRect();
+  const ox = mr.left, oy = lr.top - MARGIN;          // 画布左上角在屏幕上的位置
   const rects = new Float32Array(MAXB*4), metas = new Float32Array(MAXB*2); let n = 0;
-  for(const el of list.querySelectorAll('.bubble')){
+  for(const el of msgs.querySelectorAll('.bubble')){
     if(n >= MAXB) break;
     const r = el.getBoundingClientRect(); if(r.width < 2 || r.height < 2) continue;
-    if(r.bottom < lr.top - 30 || r.top > lr.bottom + 30) continue;
+    if(r.bottom < oy || r.top > lr.bottom + MARGIN) continue;
     const hw = Math.round(r.width/2*dpr), hh = Math.round(r.height/2*dpr);
     let rad = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 20;
-    rects.set([Math.round((r.left + r.width/2)*dpr), Math.round((r.top + r.height/2)*dpr), hw, hh], n*4);
+    rects.set([Math.round((r.left - ox + r.width/2)*dpr), Math.round((r.top - oy + r.height/2)*dpr), hw, hh], n*4);
     metas.set([Math.round(Math.min(rad*dpr, hw, hh)), slot(el.closest('.row').dataset.sk)], n*2);
     n++;
   }
   // 只有气泡位置/大小/样式变了才重画，静止时不耗电
-  const sig = n + ':' + rects.subarray(0, n*4).join(',') + '|' + metas.subarray(0, n*2).join(',') + '|' + lr.top + ',' + lr.bottom;
+  const sig = n + ':' + rects.subarray(0, n*4).join(',') + '|' + metas.subarray(0, n*2).join(',') + '|' + ox + ',' + oy;
   if(sig !== lastSig || glDirty){
     lastSig = sig; glDirty = false;
+    canvas.style.transform = `translate(0, ${oy - mr.top}px)`;   // 和这一帧的测量同步落位
     gl.uniform1i(loc.uCount, n);
     gl.uniform4fv(loc.uRect, rects); gl.uniform2fv(loc.uMeta, metas);
-    gl.uniform2f(loc.uClip, lr.top * dpr, lr.bottom * dpr);
+    gl.uniform2f(loc.uOrigin, ox * dpr, oy * dpr);
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
   requestAnimationFrame(frame);
 }
 try {
-  if(initGL()){ glOn = true; document.body.classList.add('lg'); resizeGL(); uploadStyles(); requestAnimationFrame(frame); }
+  if(initGL()){ glOn = true; document.body.classList.add('lg'); msgs.prepend(canvas); resizeGL(); uploadStyles(); requestAnimationFrame(frame); }
 } catch(err){ console.warn('WebGL 不可用，用普通气泡：', err); glOn = false; }
 
 /* ---------- 调气泡面板：我自己 + 我的 AI ---------- */
@@ -572,7 +590,7 @@ function connect(){
   es.addEventListener('avatars', e => { avatars = JSON.parse(e.data); paintAll(); });
   es.addEventListener('styles', e => { onServerStyles(JSON.parse(e.data)); });
   es.addEventListener('history', e => {
-    list.innerHTML = ''; els.clear(); lastTs = 0;
+    msgs.replaceChildren(...(glOn ? [canvas] : [])); els.clear(); lastTs = 0;
     JSON.parse(e.data).forEach(render);
     toBottom(true);
   });
