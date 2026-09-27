@@ -1,0 +1,10 @@
+# AI 群聊：配置在 config.json（从 config.example.json 复制），聊天记录存在 ./data
+services:
+  groupchat:
+    build: .
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8788:8788"      # 只本机监听，由 Nginx 反代对外
+    restart: unless-stopped

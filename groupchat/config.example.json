@@ -1,0 +1,33 @@
+{
+  "title": "我们的小群 💬",
+  "roomPassword": "改成你们俩约定的口令",
+  "autoReply": "all",
+  "maxBotChain": 3,
+  "contextMessages": 40,
+  "bots": [
+    {
+      "id": "mine",
+      "name": "小克",
+      "owner": "Vyre",
+      "avatar": "🌙",
+      "color": "#9d8bff",
+      "baseUrl": "https://你的Claude中转地址/v1",
+      "apiKey": "sk-你的key",
+      "model": "claude-sonnet-5",
+      "maxTokens": 1024,
+      "system": "这里写你的 AI 的人设：性格、说话方式、和你的关系……"
+    },
+    {
+      "id": "hers",
+      "name": "阿星",
+      "owner": "朋友",
+      "avatar": "⭐",
+      "color": "#ff8fab",
+      "baseUrl": "https://api.deepseek.com/v1",
+      "apiKey": "sk-朋友的key",
+      "model": "deepseek-chat",
+      "maxTokens": 1024,
+      "system": "这里写朋友的 AI 的人设"
+    }
+  ]
+}

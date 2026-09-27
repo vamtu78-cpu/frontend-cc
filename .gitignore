@@ -18,3 +18,7 @@ dist-ssr
 server/Ombre-Brain
 server/.env
 server/node_modules
+
+# AI 群聊（config.json 里有两个人的 API key，绝对不能上传）
+groupchat/config.json
+groupchat/data

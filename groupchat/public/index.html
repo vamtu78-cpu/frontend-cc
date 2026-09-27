@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="theme-color" content="#0f1020">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>AI 群聊</title>
+<style>
+  :root{
+    --bg:#0f1020; --bg2:#1a1438; --glass:rgba(255,255,255,.07); --glass-hi:rgba(255,255,255,.14);
+    --line:rgba(255,255,255,.12); --text:#eef0ff; --muted:rgba(238,240,255,.55);
+    --me:linear-gradient(135deg,#7c6cff,#b16cff); --accent:#9d8bff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font:15px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans SC",sans-serif;
+    color:var(--text); background:var(--bg);
+    background-image:radial-gradient(60% 50% at 15% 0%,#3a2a7a 0%,transparent 70%),
+                     radial-gradient(50% 40% at 100% 100%,#1d4a6e 0%,transparent 70%);
+    background-attachment:fixed;
+  }
+  .app{height:100dvh;display:flex;flex-direction:column;max-width:760px;margin:0 auto}
+  .glass{background:var(--glass);backdrop-filter:blur(22px) saturate(160%);-webkit-backdrop-filter:blur(22px) saturate(160%);border:1px solid var(--line)}
+
+  header{display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;border-width:0 0 1px}
+  header h1{font-size:16px;font-weight:600;flex:1}
+  header .members{font-size:12px;color:var(--muted)}
+  .dot{width:8px;height:8px;border-radius:50%;background:#555;flex:none}
+  .dot.on{background:#4ade80;box-shadow:0 0 8px #4ade80}
+
+  #list{flex:1;overflow-y:auto;padding:16px 16px 8px;display:flex;flex-direction:column;gap:14px;-webkit-overflow-scrolling:touch}
+  .row{display:flex;gap:8px;align-items:flex-start;max-width:100%}
+  .row.me{flex-direction:row-reverse}
+  .avatar{width:34px;height:34px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:16px;font-weight:600;color:#fff}
+  .col{display:flex;flex-direction:column;min-width:0;max-width:78%}
+  .row.me .col{align-items:flex-end}
+  .name{font-size:12px;color:var(--muted);margin:0 4px 3px}
+  .name .tag{font-size:10px;padding:1px 6px;border-radius:8px;background:var(--glass-hi);margin-left:4px}
+  .bubble{padding:9px 13px;border-radius:18px;border-top-left-radius:6px;white-space:pre-wrap;word-break:break-word;background:var(--glass-hi);border:1px solid var(--line)}
+  .row.me .bubble{background:var(--me);border:none;border-radius:18px;border-top-right-radius:6px}
+  .row.bot .bubble{border-color:color-mix(in srgb,var(--c) 45%,transparent);background:color-mix(in srgb,var(--c) 16%,rgba(255,255,255,.05))}
+  .row.err .bubble{opacity:.6;font-size:13px}
+  .typing::after{content:"▍";animation:blink 1s steps(2) infinite;margin-left:1px;color:var(--c,var(--accent))}
+  @keyframes blink{50%{opacity:0}}
+  .time{text-align:center;font-size:11px;color:var(--muted)}
+
+  footer{padding:8px 12px calc(env(safe-area-inset-bottom) + 10px);border-width:1px 0 0}
+  .chips{display:flex;gap:6px;margin-bottom:8px;overflow-x:auto}
+  .chip{flex:none;font-size:12px;padding:4px 10px;border-radius:14px;border:1px solid var(--line);background:var(--glass);color:var(--text);cursor:pointer}
+  .chip.stop{margin-left:auto;color:#ff9b9b}
+  .input{display:flex;gap:8px;align-items:flex-end}
+  textarea{flex:1;resize:none;max-height:140px;min-height:42px;padding:10px 14px;border-radius:21px;border:1px solid var(--line);background:rgba(255,255,255,.08);color:var(--text);font:inherit;font-size:16px;outline:none}
+  textarea:focus{border-color:var(--accent)}
+  button.send{width:42px;height:42px;border-radius:50%;border:none;background:var(--me);color:#fff;font-size:18px;cursor:pointer;flex:none}
+  button.send:disabled{opacity:.4}
+
+  #login{position:fixed;inset:0;display:grid;place-items:center;padding:16px;z-index:10;background:rgba(10,10,25,.55)}
+  #login .card{width:100%;max-width:340px;padding:28px 22px;border-radius:24px;display:flex;flex-direction:column;gap:12px}
+  #login h2{font-size:20px;text-align:center;margin-bottom:4px}
+  #login p{font-size:13px;color:var(--muted);text-align:center}
+  #login input{padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.08);color:var(--text);font-size:16px;outline:none}
+  #login button{padding:12px;border-radius:14px;border:none;background:var(--me);color:#fff;font-size:16px;font-weight:600;cursor:pointer}
+  #login .err{color:#ff9b9b;min-height:18px}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="glass">
+    <span class="dot" id="dot"></span>
+    <h1 id="title">AI 群聊</h1>
+    <span class="members" id="members"></span>
+  </header>
+  <div id="list"></div>
+  <footer class="glass">
+    <div class="chips" id="chips"></div>
+    <div class="input">
+      <textarea id="box" rows="1" placeholder="说点什么… @名字 可以点名 AI"></textarea>
+      <button class="send" id="send" aria-label="发送">➤</button>
+    </div>
+  </footer>
+</div>
+
+<div id="login" class="hidden">
+  <div class="card glass">
+    <h2>进入群聊 💬</h2>
+    <p>起个昵称，填上房间口令</p>
+    <input id="lname" placeholder="你的昵称" maxlength="20" autocomplete="nickname">
+    <input id="lkey" placeholder="房间口令" type="password">
+    <button id="lgo">进入</button>
+    <p class="err" id="lerr"></p>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const store = {
+  get(k){ try { return localStorage.getItem(k) || ''; } catch(e){ return ''; } },
+  set(k, v){ try { localStorage.setItem(k, v); } catch(e){} }
+};
+let me = store.get('gc-name'), key = store.get('gc-key');
+let bots = [], es = null;
+const els = new Map();   // 消息 id → {row, bubble}
+const list = $('#list');
+
+const PALETTE = ['#ff8fab','#7cc6fe','#ffd166','#80ed99','#c77dff','#ff9f68'];
+function colorOf(name){ let h = 0; for(const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0; return PALETTE[h % PALETTE.length]; }
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+const fmt = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/@(\S+)/g, '<b>@$1</b>');
+
+async function api(p, opt = {}){
+  const r = await fetch(p, { ...opt, headers: { 'Content-Type': 'application/json', 'X-Room-Key': key, ...(opt.headers || {}) } });
+  const j = await r.json().catch(() => ({}));
+  if(!r.ok) throw Object.assign(new Error(j.error || r.status), { status: r.status });
+  return j;
+}
+
+function nearBottom(){ return list.scrollHeight - list.scrollTop - list.clientHeight < 120; }
+function toBottom(force){ if(force || nearBottom()) requestAnimationFrame(() => list.scrollTop = list.scrollHeight); }
+
+let lastTs = 0;
+function render(m){
+  if(els.has(m.id)) return update(m);
+  if(m.ts - lastTs > 10 * 60 * 1000){
+    const t = document.createElement('div');
+    t.className = 'time';
+    t.textContent = new Date(m.ts).toLocaleString('zh-CN', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
+    list.appendChild(t);
+  }
+  lastTs = m.ts;
+  const bot = bots.find(b => b.id === m.botId);
+  const isMe = m.role === 'human' && m.name === me;
+  const c = bot?.color || colorOf(m.name);
+  const row = document.createElement('div');
+  row.className = 'row' + (isMe ? ' me' : '') + (bot ? ' bot' : '') + (m.error ? ' err' : '');
+  row.style.setProperty('--c', c);
+  row.innerHTML = `
+    <div class="avatar" style="background:${bot ? 'color-mix(in srgb,' + c + ' 35%,#1a1438)' : c}">${esc(bot?.avatar || m.name.slice(0, 1))}</div>
+    <div class="col">
+      ${isMe ? '' : `<div class="name">${esc(m.name)}${bot ? `<span class="tag">${esc(bot.owner ? bot.owner + '的AI' : 'AI')}</span>` : ''}</div>`}
+      <div class="bubble"></div>
+    </div>`;
+  const bubble = row.querySelector('.bubble');
+  els.set(m.id, { row, bubble, text: m.text || '' });
+  list.appendChild(row);
+  update(m);
+}
+function update(m){
+  const e = els.get(m.id); if(!e) return;
+  e.text = m.text ?? e.text;
+  e.bubble.innerHTML = fmt(e.text);
+  e.bubble.classList.toggle('typing', !!m.streaming);
+  e.row.classList.toggle('err', !!m.error);
+}
+
+function connect(){
+  es?.close();
+  es = new EventSource('/api/events?key=' + encodeURIComponent(key));
+  es.addEventListener('open', () => $('#dot').classList.add('on'));
+  es.addEventListener('error', () => $('#dot').classList.remove('on'));
+  es.addEventListener('history', e => {
+    list.innerHTML = ''; els.clear(); lastTs = 0;
+    JSON.parse(e.data).forEach(render);
+    toBottom(true);
+  });
+  es.addEventListener('msg', e => { const m = JSON.parse(e.data); const stick = nearBottom() || m.name === me; render(m); toBottom(stick); });
+  es.addEventListener('delta', e => {
+    const { id, text } = JSON.parse(e.data); const el = els.get(id); if(!el) return;
+    const stick = nearBottom();
+    el.text += text; el.bubble.innerHTML = fmt(el.text); toBottom(stick);
+  });
+  es.addEventListener('done', e => update(JSON.parse(e.data)));
+  es.addEventListener('remove', e => { const { id } = JSON.parse(e.data); els.get(id)?.row.remove(); els.delete(id); });
+}
+
+async function send(){
+  const text = $('#box').value.trim(); if(!text) return;
+  $('#send').disabled = true;
+  try {
+    await api('/api/send', { method: 'POST', body: JSON.stringify({ name: me, text }) });
+    $('#box').value = ''; grow();
+  } catch(e){ alert('发送失败：' + e.message); }
+  $('#send').disabled = false;
+  $('#box').focus();
+}
+
+function grow(){ const b = $('#box'); b.style.height = 'auto'; b.style.height = Math.min(b.scrollHeight, 140) + 'px'; }
+
+async function enter(){
+  try {
+    const info = await api('/api/info');
+    bots = info.bots;
+    document.title = info.title;
+    $('#title').textContent = info.title;
+    $('#members').textContent = bots.map(b => (b.avatar || '🤖') + b.name).join(' ');
+    $('#chips').innerHTML = bots.map(b => `<button class="chip" data-at="${esc(b.name)}">@${esc(b.name)}</button>`).join('')
+      + '<button class="chip stop" id="stop">✋ 让 AI 停一下</button>';
+    $('#login').classList.add('hidden');
+    connect();
+  } catch(e){
+    $('#login').classList.remove('hidden');
+    $('#lname').value = me;
+    if(e.status === 401 && key) $('#lerr').textContent = '口令不对，再试试';
+  }
+}
+
+$('#lgo').onclick = () => {
+  me = $('#lname').value.trim(); key = $('#lkey').value.trim();
+  if(!me){ $('#lerr').textContent = '先起个昵称～'; return; }
+  store.set('gc-name', me); store.set('gc-key', key);
+  $('#lerr').textContent = '';
+  enter();
+};
+$('#lkey').addEventListener('keydown', e => { if(e.key === 'Enter') $('#lgo').click(); });
+$('#send').onclick = send;
+$('#box').addEventListener('input', grow);
+$('#box').addEventListener('keydown', e => {
+  if(e.key === 'Enter' && !e.shiftKey && !e.isComposing && matchMedia('(pointer:fine)').matches){ e.preventDefault(); send(); }
+});
+$('#chips').addEventListener('click', e => {
+  const at = e.target.dataset.at;
+  if(at){ const b = $('#box'); b.value = (b.value ? b.value.replace(/\s*$/, ' ') : '') + '@' + at + ' '; b.focus(); grow(); }
+  if(e.target.id === 'stop') api('/api/stop', { method: 'POST' }).catch(() => {});
+});
+
+if(me) enter(); else $('#login').classList.remove('hidden');
+</script>
+</body>
+</html>
