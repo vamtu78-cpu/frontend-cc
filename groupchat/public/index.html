@@ -72,10 +72,34 @@
   #menu button:active{background:var(--glass-hi)}
   #menu hr{border:none;border-top:1px solid var(--line);margin:4px 8px}
   #menu .note{font-size:11px;color:var(--muted);padding:0 14px 6px}
+  /* 液态玻璃：气泡本身透明，玻璃由背后的 WebGL 画布绘制 */
+  #gl{position:fixed;inset:0;width:100%;height:100%;z-index:-1;display:none}
+  body.lg #gl{display:block}
+  body.lg #wall{display:none}
+  body.lg .bubble,body.lg .row.me .bubble,body.lg .row.bot .bubble{
+    background:transparent;border:none;border-radius:var(--br,23px);padding:var(--py,9px) var(--px,20px);
+    color:rgba(255,255,255,.96);text-shadow:0 1px 2px rgba(0,0,0,.3)}
+  body.lg .row.err .bubble{opacity:.75}
+
+  #styler{position:fixed;left:0;right:0;bottom:0;z-index:6;max-width:760px;margin:0 auto;max-height:52vh;overflow-y:auto;
+    padding:14px 18px calc(env(safe-area-inset-bottom) + 16px);border-radius:24px 24px 0 0;background:rgba(22,20,44,.97);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:0 -8px 30px rgba(0,0,0,.4);
+    -webkit-overflow-scrolling:touch}
+  #styler .tabs{display:flex;gap:8px;margin-bottom:10px;align-items:center}
+  #styler .tab{padding:6px 12px;border-radius:14px;border:1px solid var(--line);background:none;color:var(--muted);font-size:13px;cursor:pointer}
+  #styler .tab.on{background:var(--glass-hi);color:var(--text);border-color:var(--accent)}
+  #styler .x{margin-left:auto;background:none;border:none;color:var(--text);font-size:20px;cursor:pointer;padding:0 4px}
+  #styler label{display:block;font-size:12px;color:rgba(238,240,255,.8);margin-bottom:9px}
+  #styler output{float:right;font-variant-numeric:tabular-nums;color:var(--text);font-weight:600}
+  #styler input[type=range]{width:100%;accent-color:var(--accent);margin-top:2px}
+  #styler .colorrow{display:flex;align-items:center;justify-content:space-between;font-size:12px;margin-bottom:10px}
+  #styler input[type=color]{width:44px;height:28px;border:none;background:none;padding:0}
+  #styler .reset{margin-top:6px;width:100%;padding:10px;border-radius:12px;border:1px solid var(--line);background:none;color:var(--text);font-size:14px;cursor:pointer}
+  #styler .hint{font-size:11px;color:var(--muted);margin:-4px 0 10px}
   .hidden{display:none!important}
 </style>
 </head>
 <body>
+<canvas id="gl"></canvas>
 <div id="wall"></div>
 <div class="app">
   <header class="glass">
@@ -95,6 +119,7 @@
 </div>
 
 <div id="menu" class="glass hidden"></div>
+<div id="styler" class="hidden"></div>
 <input id="picker" type="file" accept="image/*" hidden>
 
 <div id="login" class="hidden">
@@ -151,6 +176,7 @@ function render(m){
   const row = document.createElement('div');
   row.className = 'row' + (isMe ? ' me' : '') + (bot ? ' bot' : '') + (m.error ? ' err' : '');
   row.style.setProperty('--c', c);
+  row.dataset.sk = bot ? 'b:' + bot.id : 'h:' + m.name;
   row.innerHTML = `
     <div class="avatar" style="background:${bot ? 'color-mix(in srgb,' + c + ' 35%,#1a1438)' : c}" data-av="${bot ? 'b:' + esc(bot.id) : 'h:' + esc(m.name)}" data-fb="${esc(bot?.avatar || m.name.slice(0, 1))}"></div>
     <div class="col">
@@ -160,6 +186,7 @@ function render(m){
   paintAvatar(row.querySelector('.avatar'));
   const bubble = row.querySelector('.bubble');
   els.set(m.id, { row, bubble, text: m.text || '' });
+  if(!styles[row.dataset.sk] && !geomSheet.textContent.includes(row.dataset.sk)) applyGeometry();
   list.appendChild(row);
   update(m);
 }
@@ -170,6 +197,292 @@ function update(m){
   e.bubble.classList.toggle('typing', !!m.streaming);
   e.row.classList.toggle('err', !!m.error);
 }
+
+/* ================= 液态玻璃（移植自聊天 App 的着色器，改成每人一套参数） ================= */
+const STYLE_SPEC = [
+  ['strength',  '折射强度',   0, 120, 1],
+  ['edge',      '玻璃厚度',   8, 80, 1],
+  ['rimPow',    '折射衰减',   0.6, 4, 0.1],
+  ['chroma',    '色散彩边',   0, 0.8, 0.01],
+  ['trans',     '透明度',     0, 1, 0.01],
+  ['contrast',  '自适应对比', 0, 1.5, 0.01],
+  ['shadow',    '阴影分离',   0, 1, 0.01],
+  ['vol',       '体积光',     0, 0.5, 0.01],
+  ['glow',      '迎光边缘',   0, 0.9, 0.01],
+  ['tint',      '玻璃染色',   0, 0.6, 0.01],
+  ['glassBlur', '玻璃模糊',   0, 12, 1],
+  ['bubRadius', '圆角',       8, 40, 1],
+  ['bubPadX',   '左右宽度',   2, 60, 1],
+  ['bubPadY',   '上下高度',   2, 40, 1],
+];
+// 聊天 App 实验台标定的那组参数
+const GLASS_DEFAULTS = { strength:24, edge:18, rimPow:1.5, chroma:0.12, trans:0.94, contrast:0.59, shadow:0.5,
+                         vol:0.06, glow:0.5, tint:0.12, glassBlur:3, bubRadius:23, bubPadX:20, bubPadY:9 };
+let styles = {};                 // 服务器同步："h:昵称" / "b:botId" → 参数
+const editedAt = {};             // 自己刚拖过的滑块，短时间内不被服务器回显覆盖
+function defaultColor(sk){
+  if(sk.startsWith('b:')){ const b = bots.find(x => 'b:' + x.id === sk); return b?.color || '#9d8bff'; }
+  return colorOf(sk.slice(2));
+}
+const styleOf = sk => ({ ...GLASS_DEFAULTS, color: defaultColor(sk), ...(styles[sk] || {}) });
+
+// 气泡几何（圆角/内边距）走 CSS 变量，按 data-sk 生成规则
+const geomSheet = document.createElement('style'); document.head.appendChild(geomSheet);
+function applyGeometry(){
+  const keys = new Set([...Object.keys(styles), ...[...document.querySelectorAll('[data-sk]')].map(r => r.dataset.sk)]);
+  geomSheet.textContent = [...keys].map(sk => { const st = styleOf(sk);
+    return `.row[data-sk="${CSS.escape(sk)}"]{--br:${st.bubRadius}px;--px:${st.bubPadX}px;--py:${st.bubPadY}px}`; }).join('\n');
+  glDirty = true;
+}
+function onServerStyles(next){
+  const now = Date.now();
+  for(const k of Object.keys(editedAt)) if(now - editedAt[k] < 1500 && styles[k]) next[k] = styles[k];
+  styles = next; applyGeometry(); uploadStyles(); if(!$('#styler').classList.contains('hidden')) syncStyler();
+}
+
+const MAXB = 48, MAXS = 8;
+const VERT = `attribute vec2 a; void main(){ gl_Position = vec4(a,0.0,1.0); }`;
+const FRAG = `
+precision highp float;
+uniform vec2 uRes; uniform sampler2D uTex; uniform int uCount; uniform vec2 uClip;
+uniform vec4 uRect[${MAXB}]; uniform vec2 uMeta[${MAXB}];
+uniform vec4 uS0[${MAXS}]; uniform vec4 uS1[${MAXS}]; uniform vec4 uS2[${MAXS}]; uniform vec3 uSC[${MAXS}];
+float sdRound(vec2 p, vec2 c, vec2 hw, float r){
+  vec2 q = abs(p-c) - hw + r;
+  return min(max(q.x,q.y),0.0) + length(max(q,0.0)) - r;
+}
+float scene(vec2 p, out float sid, out vec4 rct, out float rad){
+  float d = 1e9; sid = 0.0; rct = vec4(0.0); rad = 0.0;
+  for(int i=0;i<${MAXB};i++){ if(i>=uCount) break;
+    vec4 R = uRect[i];
+    float di = sdRound(p, R.xy, R.zw, uMeta[i].x);
+    if(di < d){ d = di; sid = uMeta[i].y; rct = R; rad = uMeta[i].x; } }
+  return d;
+}
+float sceneD(vec2 p){ float s; vec4 rr; float rd; return scene(p,s,rr,rd); }
+vec3 bg(vec2 p){ return texture2D(uTex, vec2(p.x/uRes.x, p.y/uRes.y)).rgb; }
+vec3 bgB(vec2 p, float rad){
+  vec3 s = bg(p);
+  if(rad > 0.5){
+    s += bg(p+vec2(rad,0.0)) + bg(p+vec2(-rad,0.0)) + bg(p+vec2(0.0,rad)) + bg(p+vec2(0.0,-rad));
+    float r2 = rad * 0.7071;
+    s += bg(p+vec2(r2,r2)) + bg(p+vec2(-r2,r2)) + bg(p+vec2(r2,-r2)) + bg(p+vec2(-r2,-r2));
+    s /= 9.0;
+  }
+  return s;
+}
+void main(){
+  vec2 p = vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y);
+  vec3 col = bg(p);
+  if(p.y < uClip.x || p.y > uClip.y){ gl_FragColor = vec4(col, 1.0); return; }
+  float sid; vec4 rct; float rad; float d = scene(p, sid, rct, rad);
+  // 取这个气泡主人的那套参数
+  vec4 A = uS0[0]; vec4 B = uS1[0]; vec4 C = uS2[0]; vec3 T = uSC[0];
+  for(int j=1;j<${MAXS};j++){ if(float(j) == sid){ A = uS0[j]; B = uS1[j]; C = uS2[j]; T = uSC[j]; } }
+  float uStrength = A.x, uEdge = A.y, uRimPow = A.z, uChroma = A.w;
+  float uGlow = B.x, uTint = B.y, uBlur = B.z, uTrans = B.w;
+  float uVol = C.x, uContrast = C.y, uShadow = C.z;
+
+  if(d > 0.0 && uShadow > 0.001){
+    float dS = sdRound(p - vec2(5.0, 8.0), rct.xy, rct.zw, rad);
+    float shadow = uShadow * smoothstep(20.0, 0.0, dS) * smoothstep(-1.0, 6.0, d);
+    col = mix(col, col * 0.55, shadow * 0.6);
+  }
+  float alpha = smoothstep(1.6, -1.6, d);
+  if(alpha > 0.001){
+    float e = 1.5;
+    vec2 g = normalize(vec2(sceneD(p+vec2(e,0.))-sceneD(p-vec2(e,0.)),
+                            sceneD(p+vec2(0.,e))-sceneD(p-vec2(0.,e))) + 1e-6);
+    float dIn = -d;
+    vec2 hf = max(rct.zw, vec2(1.0));
+    vec2 lp = (p - rct.xy) / hf;
+    vec2 Ldir = normalize(vec2(-0.55, -0.83));
+    float t = clamp(dIn / max(uEdge, 1.0), 0.0, 1.0);
+    float lens = pow(1.0 - t, uRimPow);
+    vec2 off = g * uStrength * lens;
+    float blur = uBlur * (1.0 + lens * 0.6);
+    vec3 refr;
+    refr.r = bgB(p + off*(1.0+uChroma), blur).r;
+    refr.g = bgB(p + off, blur).g;
+    refr.b = bgB(p + off*(1.0-uChroma), blur).b;
+    vec3 milk = vec3(0.86, 0.89, 0.95);
+    vec3 glass = mix(milk, refr, clamp(uTrans, 0.0, 1.0));
+    glass = mix(glass, T, uTint);
+    float Lb = dot(refr, vec3(0.299, 0.587, 0.114));
+    vec3 adapt = Lb > 0.5 ? vec3(0.05, 0.06, 0.08) : vec3(0.97, 0.98, 1.0);
+    glass = mix(glass, adapt, clamp(uContrast, 0.0, 1.5) * 0.20);
+    vec2 hp = lp - vec2(-0.42, -0.5);
+    float vol = exp(-dot(hp, hp) * 1.5) * smoothstep(0.0, 7.0, dIn);
+    glass += vec3(1.0) * vol * uVol;
+    float rimHi = pow(1.0 - smoothstep(0.0, 5.0, dIn), 1.7);
+    float ndl = dot(g, Ldir);
+    glass += vec3(1.0) * rimHi * max(ndl, 0.0) * uGlow;
+    glass *= 1.0 - rimHi * max(-ndl, 0.0) * 0.30;
+    float spec = pow(max(ndl, 0.0), 22.0) * rimHi;
+    glass += vec3(1.0) * spec * 0.35;
+    col = mix(col, glass, alpha);
+  }
+  gl_FragColor = vec4(col, 1.0);
+}`;
+
+const canvas = $('#gl');
+let gl = null, glOn = false, loc = {}, tex, glDirty = true, lastSig = '';
+const dpr = Math.min(devicePixelRatio || 1, 2);
+let wallImg = null;
+const slotOf = new Map();        // style key → 着色器里的参数槽位
+
+function hexToVec(h){ const n = parseInt(h.slice(1), 16); return [((n>>16)&255)/255, ((n>>8)&255)/255, (n&255)/255]; }
+function compile(t, src){ const sh = gl.createShader(t); gl.shaderSource(sh, src); gl.compileShader(sh);
+  if(!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh)); return sh; }
+function initGL(){
+  gl = canvas.getContext('webgl', { premultipliedAlpha:false, antialias:true });
+  if(!gl) return false;
+  const prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+  gl.linkProgram(prog);
+  if(!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+  const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), gl.STATIC_DRAW);
+  const a = gl.getAttribLocation(prog, 'a'); gl.enableVertexAttribArray(a); gl.vertexAttribPointer(a,2,gl.FLOAT,false,0,0);
+  ['uRes','uTex','uCount','uClip'].forEach(n => loc[n] = gl.getUniformLocation(prog, n));
+  ['uRect','uMeta','uS0','uS1','uS2','uSC'].forEach(n => loc[n] = gl.getUniformLocation(prog, n + '[0]'));
+  tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.uniform1i(loc.uTex, 0);
+  return true;
+}
+// 玻璃背后的场景：自己的背景图，或者群聊默认的紫蓝渐变（加几团柔光，折射才看得出来）
+function buildScene(w, h){
+  const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d');
+  if(wallImg){
+    const ir = wallImg.width / wallImg.height, cr = w / h; let dw, dh;
+    if(ir > cr){ dh = h; dw = h * ir; } else { dw = w; dh = w / ir; }
+    x.drawImage(wallImg, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    x.fillStyle = 'rgba(15,16,32,0.22)'; x.fillRect(0, 0, w, h);
+    return c;
+  }
+  x.fillStyle = '#0f1020'; x.fillRect(0, 0, w, h);
+  [[0.15,0.0,1.0,'#3a2a7a'],[1.0,1.0,0.9,'#1d4a6e'],[0.8,0.25,0.5,'#5b3f9e'],[0.2,0.6,0.55,'#2b3f7a'],
+   [0.6,0.8,0.45,'#6a4a8e'],[0.35,0.35,0.3,'#8a78c8']].forEach(([bx,by,rr,cl]) => {
+    const r = rr * Math.max(w, h) * 0.5;
+    const g = x.createRadialGradient(bx*w, by*h, 0, bx*w, by*h, r);
+    g.addColorStop(0, cl); g.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = g; x.fillRect(0, 0, w, h);
+  });
+  return c;
+}
+function uploadTexture(){
+  if(!glOn) return;
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, buildScene(canvas.width, canvas.height));
+  glDirty = true;
+}
+function setGlassWallpaper(src){
+  if(!src){ wallImg = null; uploadTexture(); return; }
+  const img = new Image(); img.onload = () => { wallImg = img; uploadTexture(); }; img.src = src;
+}
+function uploadStyles(){
+  if(!glOn) return;
+  const s0 = new Float32Array(MAXS*4), s1 = new Float32Array(MAXS*4), s2 = new Float32Array(MAXS*4), sc = new Float32Array(MAXS*3);
+  const put = (i, sk) => { const st = styleOf(sk);
+    s0.set([st.strength*dpr, st.edge*dpr, st.rimPow, st.chroma], i*4);
+    s1.set([st.glow, st.tint, st.glassBlur*dpr, st.trans], i*4);
+    s2.set([st.vol, st.contrast, st.shadow, 0], i*4);
+    sc.set(hexToVec(st.color), i*3); };
+  put(0, 'h:');
+  for(const [sk, i] of slotOf) put(i, sk);
+  gl.uniform4fv(loc.uS0, s0); gl.uniform4fv(loc.uS1, s1); gl.uniform4fv(loc.uS2, s2); gl.uniform3fv(loc.uSC, sc);
+  glDirty = true;
+}
+function slot(sk){
+  if(!slotOf.has(sk)){
+    if(slotOf.size >= MAXS - 1) return 0;
+    slotOf.set(sk, slotOf.size + 1); uploadStyles();
+  }
+  return slotOf.get(sk);
+}
+function resizeGL(){
+  const w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
+  if(!w || !h || (canvas.width === w && canvas.height === h)) return;
+  canvas.width = w; canvas.height = h; gl.viewport(0, 0, w, h);
+  gl.uniform2f(loc.uRes, w, h);
+  uploadTexture();
+}
+function frame(){
+  resizeGL();
+  const lr = list.getBoundingClientRect();
+  const rects = new Float32Array(MAXB*4), metas = new Float32Array(MAXB*2); let n = 0;
+  for(const el of list.querySelectorAll('.bubble')){
+    if(n >= MAXB) break;
+    const r = el.getBoundingClientRect(); if(r.width < 2 || r.height < 2) continue;
+    if(r.bottom < lr.top - 30 || r.top > lr.bottom + 30) continue;
+    const hw = Math.round(r.width/2*dpr), hh = Math.round(r.height/2*dpr);
+    let rad = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 20;
+    rects.set([Math.round((r.left + r.width/2)*dpr), Math.round((r.top + r.height/2)*dpr), hw, hh], n*4);
+    metas.set([Math.round(Math.min(rad*dpr, hw, hh)), slot(el.closest('.row').dataset.sk)], n*2);
+    n++;
+  }
+  // 只有气泡位置/大小/样式变了才重画，静止时不耗电
+  const sig = n + ':' + rects.subarray(0, n*4).join(',') + '|' + metas.subarray(0, n*2).join(',') + '|' + lr.top + ',' + lr.bottom;
+  if(sig !== lastSig || glDirty){
+    lastSig = sig; glDirty = false;
+    gl.uniform1i(loc.uCount, n);
+    gl.uniform4fv(loc.uRect, rects); gl.uniform2fv(loc.uMeta, metas);
+    gl.uniform2f(loc.uClip, lr.top * dpr, lr.bottom * dpr);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  requestAnimationFrame(frame);
+}
+try {
+  if(initGL()){ glOn = true; document.body.classList.add('lg'); resizeGL(); uploadStyles(); requestAnimationFrame(frame); }
+} catch(err){ console.warn('WebGL 不可用，用普通气泡：', err); glOn = false; }
+
+/* ---------- 调气泡面板：我自己 + 我的 AI ---------- */
+let stylerKey = '';
+const myKeys = () => [['h:' + me, '我的气泡'], ...bots.filter(b => b.owner === me).map(b => ['b:' + b.id, b.name + ' 的气泡'])];
+function openStyler(){ stylerKey = stylerKey && myKeys().some(k => k[0] === stylerKey) ? stylerKey : 'h:' + me; renderStyler(); $('#styler').classList.remove('hidden'); }
+function renderStyler(){
+  const keys = myKeys(), st = styleOf(stylerKey);
+  const noBot = bots.length && !bots.some(b => b.owner === me);
+  $('#styler').innerHTML = `<div class="tabs">${keys.map(([k, t]) => `<button class="tab${k === stylerKey ? ' on' : ''}" data-k="${esc(k)}">${esc(t)}</button>`).join('')}<button class="x" aria-label="关闭">✕</button></div>`
+    + (noBot ? `<div class="hint">没找到你的 AI：配置里 AI 的 owner 要和你的昵称「${esc(me)}」一样</div>` : '')
+    + `<div class="hint">拖动时对方那边会实时跟着变</div>`
+    + `<div class="colorrow">气泡颜色<input type="color" id="st-color" value="${st.color}"></div>`
+    + STYLE_SPEC.map(([k, label, lo, hi, step]) => `<label>${label} <output id="sv-${k}"></output><input type="range" id="st-${k}" min="${lo}" max="${hi}" step="${step}" value="${st[k]}"></label>`).join('')
+    + `<button class="reset">恢复默认</button>`;
+  syncStyler();
+}
+function syncStyler(){
+  const st = styleOf(stylerKey);
+  for(const [k] of STYLE_SPEC){ const r = $('#st-' + k); if(r && document.activeElement !== r) r.value = st[k]; const o = $('#sv-' + k); if(o) o.textContent = +(+st[k]).toFixed(2); }
+  const c = $('#st-color'); if(c && document.activeElement !== c) c.value = st.color;
+}
+let pushTimer = null;
+function pushStyle(sk){
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(() => {
+    const body = { name: me, style: styles[sk] || null };
+    if(sk.startsWith('b:')) body.bot = sk.slice(2);
+    api('/api/style', { method: 'POST', body: JSON.stringify(body) }).catch(e => alert('保存失败：' + e.message));
+  }, 150);
+}
+$('#styler').addEventListener('input', e => {
+  const id = e.target.id; if(!id.startsWith('st-')) return;
+  const k = id.slice(3), v = k === 'color' ? e.target.value : +e.target.value;
+  styles[stylerKey] = { ...styleOf(stylerKey), [k]: v };
+  editedAt[stylerKey] = Date.now();
+  applyGeometry(); uploadStyles(); syncStyler(); pushStyle(stylerKey);
+});
+$('#styler').addEventListener('click', e => {
+  if(e.target.classList.contains('x')) $('#styler').classList.add('hidden');
+  if(e.target.dataset.k){ stylerKey = e.target.dataset.k; renderStyler(); }
+  if(e.target.classList.contains('reset')){ delete styles[stylerKey]; editedAt[stylerKey] = Date.now(); applyGeometry(); uploadStyles(); syncStyler(); pushStyle(stylerKey); }
+});
 
 /* ---------- 头像 ---------- */
 function paintAvatar(el){
@@ -214,6 +527,7 @@ async function changeAvatar(target){
 /* ---------- 背景图（只存在自己浏览器里，别人看不到） ---------- */
 function applyWall(src){
   $('#wall').style.backgroundImage = src ? `linear-gradient(rgba(15,16,32,.45),rgba(15,16,32,.45)), url("${src}")` : '';
+  setGlassWallpaper(src);
 }
 async function changeWall(){
   const file = await pickImage(); if(!file) return;
@@ -231,6 +545,7 @@ function openMenu(){
   m.innerHTML = `<button data-act="me">🙂 换我的头像</button>`
     + bots.map(b => `<button data-act="bot" data-id="${esc(b.id)}">${esc(b.avatar || '🤖')} 换 ${esc(b.name)} 的头像</button>`).join('')
     + `<div class="note">头像所有人都能看到</div><hr>`
+    + (glOn ? `<button data-act="style">🫧 调我的液态玻璃气泡</button><div class="note">你和你的 AI 的气泡，所有人都能看到</div><hr>` : '')
     + `<button data-act="wall">🖼️ 换背景图</button><button data-act="nowall">↩️ 恢复默认背景</button>`
     + `<div class="note">背景只有你自己能看到</div>`;
   m.classList.remove('hidden');
@@ -244,6 +559,7 @@ $('#menu').addEventListener('click', e => {
   if(act === 'me') changeAvatar({ name: me });
   if(act === 'bot') changeAvatar({ bot: b.dataset.id });
   if(act === 'wall') changeWall();
+  if(act === 'style') openStyler();
   if(act === 'nowall'){ applyWall(''); try { localStorage.removeItem('gc-wall'); } catch(e){} }
 });
 applyWall(store.get('gc-wall'));
@@ -254,6 +570,7 @@ function connect(){
   es.addEventListener('open', () => $('#dot').classList.add('on'));
   es.addEventListener('error', () => $('#dot').classList.remove('on'));
   es.addEventListener('avatars', e => { avatars = JSON.parse(e.data); paintAll(); });
+  es.addEventListener('styles', e => { onServerStyles(JSON.parse(e.data)); });
   es.addEventListener('history', e => {
     list.innerHTML = ''; els.clear(); lastTs = 0;
     JSON.parse(e.data).forEach(render);

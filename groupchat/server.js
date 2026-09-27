@@ -11,6 +11,7 @@ const DIR = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_FILE = process.env.CONFIG || path.join(DIR, 'config.json');
 const DATA_FILE = process.env.DATA || path.join(DIR, 'data', 'messages.json');
 const AVATAR_FILE = path.join(path.dirname(DATA_FILE), 'avatars.json');
+const STYLE_FILE = path.join(path.dirname(DATA_FILE), 'styles.json');
 
 if(!fs.existsSync(CONFIG_FILE)){
   console.error('找不到 config.json：请先 cp config.example.json config.json 并填好');
@@ -51,6 +52,25 @@ function addMessage(m){
 let avatars = { humans: {}, bots: {} };
 try { avatars = { ...avatars, ...JSON.parse(fs.readFileSync(AVATAR_FILE, 'utf8')) }; } catch(e){}
 const IMG_RE = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/;
+
+/* ================= 液态玻璃气泡样式（所有人可见，只能改自己和自己 AI 的） ================= */
+// { "h:昵称": {...}, "b:botId": {...} }
+let styles = {};
+try { styles = JSON.parse(fs.readFileSync(STYLE_FILE, 'utf8')); } catch(e){}
+const STYLE_RANGES = {
+  strength: [0, 120], edge: [8, 80], rimPow: [0.6, 4], chroma: [0, 0.8], trans: [0, 1], contrast: [0, 1.5],
+  shadow: [0, 1], vol: [0, 0.5], glow: [0, 0.9], tint: [0, 0.6], glassBlur: [0, 12],
+  bubRadius: [8, 40], bubPadX: [2, 60], bubPadY: [2, 40]
+};
+function cleanStyle(st){
+  const out = {};
+  for(const [k, [lo, hi]] of Object.entries(STYLE_RANGES)){
+    const v = Number(st?.[k]);
+    if(Number.isFinite(v)) out[k] = Math.min(hi, Math.max(lo, v));
+  }
+  if(/^#[0-9a-fA-F]{6}$/.test(st?.color || '')) out.color = st.color;
+  return out;
+}
 
 /* ================= SSE 广播 ================= */
 const clients = new Set();
@@ -212,6 +232,7 @@ const server = http.createServer(async (req, res) => {
   if(req.method === 'GET' && p === '/api/events'){
     res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no' });
     res.write(`event: avatars\ndata: ${JSON.stringify(avatars)}\n\n`);
+    res.write(`event: styles\ndata: ${JSON.stringify(styles)}\n\n`);
     res.write(`event: history\ndata: ${JSON.stringify(messages.slice(-200))}\n\n`);
     clients.add(res);
     req.on('close', () => clients.delete(res));
@@ -240,6 +261,24 @@ const server = http.createServer(async (req, res) => {
     fs.mkdirSync(path.dirname(AVATAR_FILE), { recursive: true });
     fs.writeFileSync(AVATAR_FILE, JSON.stringify(avatars));
     broadcast('avatars', avatars);
+    return json(res, 200, { ok: true });
+  }
+  if(req.method === 'POST' && p === '/api/style'){
+    let body;
+    try { body = await readBody(req); } catch(e){ return json(res, 400, { error: 'bad json' }); }
+    const name = String(body.name || '').trim().slice(0, 20);
+    if(!name) return json(res, 400, { error: '缺少昵称' });
+    let key = 'h:' + name;
+    if(body.bot){
+      const bot = bots.find(b => b.id === String(body.bot));
+      if(!bot) return json(res, 400, { error: '没有这个 AI' });
+      if(bot.owner !== name) return json(res, 403, { error: `只有 ${bot.owner} 能调 ${bot.name} 的气泡` });
+      key = 'b:' + bot.id;
+    }
+    if(body.style) styles[key] = cleanStyle(body.style); else delete styles[key];
+    fs.mkdirSync(path.dirname(STYLE_FILE), { recursive: true });
+    fs.writeFileSync(STYLE_FILE, JSON.stringify(styles));
+    broadcast('styles', styles);
     return json(res, 200, { ok: true });
   }
   if(req.method === 'POST' && p === '/api/stop'){
