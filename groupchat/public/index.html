@@ -63,15 +63,26 @@
   #login input{padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:rgba(255,255,255,.08);color:var(--text);font-size:16px;outline:none}
   #login button{padding:12px;border-radius:14px;border:none;background:var(--me);color:#fff;font-size:16px;font-weight:600;cursor:pointer}
   #login .err{color:#ff9b9b;min-height:18px}
+  .avatar{overflow:hidden}
+  .avatar img{width:100%;height:100%;object-fit:cover;display:block}
+  #wall{position:fixed;inset:0;z-index:-1;background-size:cover;background-position:center}
+  #menuBtn{width:32px;height:32px;border-radius:50%;border:1px solid var(--line);background:var(--glass);color:var(--text);font-size:15px;cursor:pointer;flex:none}
+  #menu{position:fixed;top:calc(env(safe-area-inset-top) + 56px);right:max(12px,calc(50vw - 368px));z-index:5;min-width:210px;padding:6px;border-radius:18px;display:flex;flex-direction:column;background:rgba(30,26,60,.82)}
+  #menu button{padding:11px 14px;border:none;background:none;color:var(--text);font-size:15px;text-align:left;border-radius:12px;cursor:pointer}
+  #menu button:active{background:var(--glass-hi)}
+  #menu hr{border:none;border-top:1px solid var(--line);margin:4px 8px}
+  #menu .note{font-size:11px;color:var(--muted);padding:0 14px 6px}
   .hidden{display:none!important}
 </style>
 </head>
 <body>
+<div id="wall"></div>
 <div class="app">
   <header class="glass">
     <span class="dot" id="dot"></span>
     <h1 id="title">AI 群聊</h1>
     <span class="members" id="members"></span>
+    <button id="menuBtn" aria-label="设置">⚙️</button>
   </header>
   <div id="list"></div>
   <footer class="glass">
@@ -82,6 +93,9 @@
     </div>
   </footer>
 </div>
+
+<div id="menu" class="glass hidden"></div>
+<input id="picker" type="file" accept="image/*" hidden>
 
 <div id="login" class="hidden">
   <div class="card glass">
@@ -102,6 +116,7 @@ const store = {
 };
 let me = store.get('gc-name'), key = store.get('gc-key');
 let bots = [], es = null;
+let avatars = { humans: {}, bots: {} };   // 服务器同步，所有人可见
 const els = new Map();   // 消息 id → {row, bubble}
 const list = $('#list');
 
@@ -137,11 +152,12 @@ function render(m){
   row.className = 'row' + (isMe ? ' me' : '') + (bot ? ' bot' : '') + (m.error ? ' err' : '');
   row.style.setProperty('--c', c);
   row.innerHTML = `
-    <div class="avatar" style="background:${bot ? 'color-mix(in srgb,' + c + ' 35%,#1a1438)' : c}">${esc(bot?.avatar || m.name.slice(0, 1))}</div>
+    <div class="avatar" style="background:${bot ? 'color-mix(in srgb,' + c + ' 35%,#1a1438)' : c}" data-av="${bot ? 'b:' + esc(bot.id) : 'h:' + esc(m.name)}" data-fb="${esc(bot?.avatar || m.name.slice(0, 1))}"></div>
     <div class="col">
       ${isMe ? '' : `<div class="name">${esc(m.name)}${bot ? `<span class="tag">${esc(bot.owner ? bot.owner + '的AI' : 'AI')}</span>` : ''}</div>`}
       <div class="bubble"></div>
     </div>`;
+  paintAvatar(row.querySelector('.avatar'));
   const bubble = row.querySelector('.bubble');
   els.set(m.id, { row, bubble, text: m.text || '' });
   list.appendChild(row);
@@ -155,11 +171,89 @@ function update(m){
   e.row.classList.toggle('err', !!m.error);
 }
 
+/* ---------- 头像 ---------- */
+function paintAvatar(el){
+  const [k, ...rest] = el.dataset.av.split(':'); const id = rest.join(':');
+  const src = (k === 'b' ? avatars.bots : avatars.humans)[id];
+  if(src){ const img = new Image(); img.src = src; img.alt = ''; el.replaceChildren(img); }
+  else el.textContent = el.dataset.fb;
+}
+const paintAll = () => document.querySelectorAll('[data-av]').forEach(paintAvatar);
+
+// 把选的图压小：头像裁成正方形 256px，背景最长边 1440px
+async function shrink(file, max, square){
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image(); img.src = url; await img.decode();
+    let sw = img.naturalWidth, sh = img.naturalHeight, sx = 0, sy = 0;
+    if(square){ const d = Math.min(sw, sh); sx = (sw - d) / 2; sy = (sh - d) / 2; sw = sh = d; }
+    const k = Math.min(1, max / Math.max(sw, sh));
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(sw * k); cv.height = Math.round(sh * k);
+    const g = cv.getContext('2d');
+    g.fillStyle = '#1a1438'; g.fillRect(0, 0, cv.width, cv.height);
+    g.drawImage(img, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
+    return cv.toDataURL('image/jpeg', square ? 0.85 : 0.8);
+  } finally { URL.revokeObjectURL(url); }
+}
+function pickImage(){
+  return new Promise(resolve => {
+    const p = $('#picker'); p.value = '';
+    p.onchange = () => resolve(p.files[0] || null);
+    p.click();
+  });
+}
+async function changeAvatar(target){
+  const file = await pickImage(); if(!file) return;
+  try {
+    const image = await shrink(file, 256, true);
+    await api('/api/avatar', { method: 'POST', body: JSON.stringify({ ...target, image }) });
+  } catch(e){ alert('换头像失败：' + e.message); }
+}
+
+/* ---------- 背景图（只存在自己浏览器里，别人看不到） ---------- */
+function applyWall(src){
+  $('#wall').style.backgroundImage = src ? `linear-gradient(rgba(15,16,32,.45),rgba(15,16,32,.45)), url("${src}")` : '';
+}
+async function changeWall(){
+  const file = await pickImage(); if(!file) return;
+  try {
+    const src = await shrink(file, 1440, false);
+    applyWall(src);
+    try { localStorage.setItem('gc-wall', src); }
+    catch(e){ alert('浏览器存不下这张图，这次先用着，下次打开会恢复默认'); }
+  } catch(e){ alert('这张图打不开：' + e.message); }
+}
+
+/* ---------- 菜单 ---------- */
+function openMenu(){
+  const m = $('#menu');
+  m.innerHTML = `<button data-act="me">🙂 换我的头像</button>`
+    + bots.map(b => `<button data-act="bot" data-id="${esc(b.id)}">${esc(b.avatar || '🤖')} 换 ${esc(b.name)} 的头像</button>`).join('')
+    + `<div class="note">头像所有人都能看到</div><hr>`
+    + `<button data-act="wall">🖼️ 换背景图</button><button data-act="nowall">↩️ 恢复默认背景</button>`
+    + `<div class="note">背景只有你自己能看到</div>`;
+  m.classList.remove('hidden');
+}
+$('#menuBtn').onclick = e => { e.stopPropagation(); $('#menu').classList.contains('hidden') ? openMenu() : $('#menu').classList.add('hidden'); };
+document.addEventListener('click', e => { if(!e.target.closest('#menu')) $('#menu').classList.add('hidden'); });
+$('#menu').addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return;
+  $('#menu').classList.add('hidden');
+  const act = b.dataset.act;
+  if(act === 'me') changeAvatar({ name: me });
+  if(act === 'bot') changeAvatar({ bot: b.dataset.id });
+  if(act === 'wall') changeWall();
+  if(act === 'nowall'){ applyWall(''); try { localStorage.removeItem('gc-wall'); } catch(e){} }
+});
+applyWall(store.get('gc-wall'));
+
 function connect(){
   es?.close();
   es = new EventSource('api/events?key=' + encodeURIComponent(key));
   es.addEventListener('open', () => $('#dot').classList.add('on'));
   es.addEventListener('error', () => $('#dot').classList.remove('on'));
+  es.addEventListener('avatars', e => { avatars = JSON.parse(e.data); paintAll(); });
   es.addEventListener('history', e => {
     list.innerHTML = ''; els.clear(); lastTs = 0;
     JSON.parse(e.data).forEach(render);

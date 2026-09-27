@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_FILE = process.env.CONFIG || path.join(DIR, 'config.json');
 const DATA_FILE = process.env.DATA || path.join(DIR, 'data', 'messages.json');
+const AVATAR_FILE = path.join(path.dirname(DATA_FILE), 'avatars.json');
 
 if(!fs.existsSync(CONFIG_FILE)){
   console.error('找不到 config.json：请先 cp config.example.json config.json 并填好');
@@ -44,6 +45,12 @@ function addMessage(m){
   save();
   return msg;
 }
+
+/* ================= 头像（所有人可见） ================= */
+// { humans: {昵称: dataURL}, bots: {botId: dataURL} }，图片在浏览器端已压成 256px 小图
+let avatars = { humans: {}, bots: {} };
+try { avatars = { ...avatars, ...JSON.parse(fs.readFileSync(AVATAR_FILE, 'utf8')) }; } catch(e){}
+const IMG_RE = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/;
 
 /* ================= SSE 广播 ================= */
 const clients = new Set();
@@ -204,6 +211,7 @@ const server = http.createServer(async (req, res) => {
   }
   if(req.method === 'GET' && p === '/api/events'){
     res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no' });
+    res.write(`event: avatars\ndata: ${JSON.stringify(avatars)}\n\n`);
     res.write(`event: history\ndata: ${JSON.stringify(messages.slice(-200))}\n\n`);
     clients.add(res);
     req.on('close', () => clients.delete(res));
@@ -218,6 +226,20 @@ const server = http.createServer(async (req, res) => {
     if(bots.some(b => b.name === name)) return json(res, 400, { error: '不能冒充 AI 的名字哦' });
     const msg = addMessage({ role: 'human', name, text });
     onNewMessage(msg, 0);
+    return json(res, 200, { ok: true });
+  }
+  if(req.method === 'POST' && p === '/api/avatar'){
+    let body;
+    try { body = await readBody(req); } catch(e){ return json(res, 400, { error: '图片太大了' }); }
+    const image = body.image ? String(body.image) : '';
+    if(image && (image.length > 400000 || !IMG_RE.test(image))) return json(res, 400, { error: '图片格式不对或太大' });
+    let group, id;
+    if(body.bot){ group = 'bots'; id = String(body.bot); if(!bots.some(b => b.id === id)) return json(res, 400, { error: '没有这个 AI' }); }
+    else { group = 'humans'; id = String(body.name || '').trim().slice(0, 20); if(!id) return json(res, 400, { error: '缺少昵称' }); }
+    if(image) avatars[group][id] = image; else delete avatars[group][id];
+    fs.mkdirSync(path.dirname(AVATAR_FILE), { recursive: true });
+    fs.writeFileSync(AVATAR_FILE, JSON.stringify(avatars));
+    broadcast('avatars', avatars);
     return json(res, 200, { ok: true });
   }
   if(req.method === 'POST' && p === '/api/stop'){
