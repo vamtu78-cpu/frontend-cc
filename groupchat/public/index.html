@@ -111,7 +111,7 @@ const esc = s => s.replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;
 const fmt = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/@(\S+)/g, '<b>@$1</b>');
 
 async function api(p, opt = {}){
-  const r = await fetch(p, { ...opt, headers: { 'Content-Type': 'application/json', 'X-Room-Key': key, ...(opt.headers || {}) } });
+  const r = await fetch(p.replace(/^\//, ''), { ...opt, headers: { 'Content-Type': 'application/json', 'X-Room-Key': key, ...(opt.headers || {}) } });
   const j = await r.json().catch(() => ({}));
   if(!r.ok) throw Object.assign(new Error(j.error || r.status), { status: r.status });
   return j;
@@ -157,7 +157,7 @@ function update(m){
 
 function connect(){
   es?.close();
-  es = new EventSource('/api/events?key=' + encodeURIComponent(key));
+  es = new EventSource('api/events?key=' + encodeURIComponent(key));
   es.addEventListener('open', () => $('#dot').classList.add('on'));
   es.addEventListener('error', () => $('#dot').classList.remove('on'));
   es.addEventListener('history', e => {
