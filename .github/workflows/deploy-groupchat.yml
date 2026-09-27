@@ -7,7 +7,7 @@ on:
     branches: [ claude/confident-hamilton-podywp, claude/frontend-chat-app-kp2vju ]
     paths:
       - 'groupchat/**'
-      - 'scripts/groupchat-remote.sh'
+      - 'scripts/groupchat-*'
       - '.github/workflows/deploy-groupchat.yml'
   workflow_dispatch:
 
