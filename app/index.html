@@ -378,20 +378,15 @@
   }
 
   /* ===== 开屏 ===== */
-  .splash { position: absolute; inset: 0; z-index: 20; cursor: pointer; }
-  .splash-orb { position: absolute; border-radius: 999px; }
-  .splash-avatar {
-    position: absolute; border-radius: 999px; overflow: hidden;
-    display: flex; align-items: center; justify-content: center;
-    color: #fff; font-weight: 600;
-    background: linear-gradient(135deg, #7c8ce0, #cf6bd6);
-    box-shadow: inset 0 1px 2px rgba(255,255,255,0.4);
+  .splash { position: absolute; inset: 0; z-index: 20; touch-action: none; background: #030306; }
+  .splash canvas { width: 100%; height: 100%; display: block; }
+  .splash-hint {
+    position: absolute; left: 0; right: 0; bottom: calc(46px + env(safe-area-inset-bottom));
+    text-align: center; font-size: 13px; letter-spacing: 0.32em; color: rgba(255,255,255,0.6);
+    pointer-events: none; transition: opacity 0.5s; animation: hintPulse 2.6s ease-in-out infinite;
   }
-  .splash-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .splash-name {
-    position: absolute; white-space: nowrap; color: #fff;
-    font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.3);
-  }
+  .splash-hint.gone { opacity: 0; animation: none; }
+  @keyframes hintPulse { 0%,100% { opacity: 0.35; } 50% { opacity: 0.8; } }
   .booting .cap-avatar, .booting .cap-name { opacity: 0; }
   .glass.gl-off { border-color: transparent; box-shadow: none; }
   .row.gl-off { visibility: hidden; }
@@ -1004,6 +999,7 @@ const msgVp = document.getElementById('msg-viewport');
 function frame(){
   resize();
   scroller.tick();
+  if(glPaused){ requestAnimationFrame(frame); return; }
   const pr = phone.getBoundingClientRect(), vr = msgVp.getBoundingClientRect();
   const els = phone.querySelectorAll('.glass');
   const rects = new Float32Array(MAX*4), metas = new Float32Array(MAX*2); let n = 0;
@@ -1665,10 +1661,13 @@ renderMessages();
 renderWindows();
 applyAvatars();
 
-/* ===== 开屏 =====
-   中央一颗玻璃球托着头像浮现 → 变形飞进顶栏名字胶囊，头像/名字各自飞到原位；
-   输入框从底部滑上来，气泡自下而上依次"长"出来。点一下跳过；减少动态效果时不播。 */
-(function splashScreen(){
+/* ===== 开屏：水墨晕染 =====
+   三层画面(上→下)：黑色星空 / 灰色水墨 / 镭射。全部由着色器实时生成，不需要素材图。
+   手指划过的地方像墨在宣纸上洇开：先露出灰墨，越浓的地方再露出底下的镭射；
+   松手后墨慢慢退回去，星空复原。轻点一下 → 从点击处整片晕开，露出聊天界面。
+   晕染本身是一张低分辨率的小流体：R=墨浓度，GB=流速，每步做平流 + 扩散 + 衰减。 */
+let glPaused = false;   // 开屏完全遮住时，聊天界面的玻璃暂停绘制，省 GPU
+(function inkSplash(){
   if(matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const capsule = document.getElementById('name-capsule');
   const menuBtn = document.getElementById('menu-btn');
@@ -1676,84 +1675,282 @@ applyAvatars();
   const viewport = document.getElementById('msg-viewport');
   const rows = [...messagesEl.querySelectorAll('.row')];
   const offs = [capsule, menuBtn, composer, ...rows];
-  offs.forEach(el => el.classList.add('gl-off'));
-  phone.classList.add('booting');
-
-  const P = phone.getBoundingClientRect();
-  const rel = el => { const r = el.getBoundingClientRect(); return { x: r.left - P.left, y: r.top - P.top, w: r.width, h: r.height }; };
-  const box = (x, y, w, h) => ({ left: x + 'px', top: y + 'px', width: w + 'px', height: h + 'px' });
 
   const splash = document.createElement('div'); splash.className = 'splash';
-  const orb = document.createElement('div'); orb.className = 'glass splash-orb'; orb.dataset.color = 'ai';
-  const av = document.createElement('div'); av.className = 'splash-avatar'; av.innerHTML = avatarHTML('left');
-  const nm = document.createElement('div'); nm.className = 'splash-name'; nm.textContent = nickname;
-  splash.append(orb, av, nm); phone.append(splash);
+  const cv = document.createElement('canvas');
+  const hint = document.createElement('div'); hint.className = 'splash-hint'; hint.textContent = '滑动晕染 · 轻触进入';
+  splash.append(cv, hint);
+  const g = cv.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: false });
+  if(!g) return;
+  offs.forEach(el => el.classList.add('gl-off'));
+  phone.classList.add('booting');
+  phone.append(splash);
+  // 先让聊天玻璃画上一帧再暂停，离场晕开时底下立刻有画面，不会露出黑洞
+  requestAnimationFrame(() => requestAnimationFrame(() => { if(!exitAt) glPaused = true; }));
 
-  // 起点：画面中上部
-  const W = P.width, cx = W / 2, cy = P.height * 0.4;
-  const O = 148, A = 92, F0 = 26;
-  Object.assign(orb.style, box(cx - O/2, cy - O/2, O, O));
-  Object.assign(av.style, box(cx - A/2, cy - A/2, A, A), { fontSize: A * 0.47 + 'px' });
-  nm.style.fontSize = F0 + 'px';
-  const nmW = nm.offsetWidth;
-  Object.assign(nm.style, { left: cx - nmW/2 + 'px', top: cy + O/2 + 22 + 'px' });
+  const VS = 'attribute vec2 a; varying vec2 v; void main(){ v = a*0.5+0.5; gl_Position = vec4(a,0.0,1.0); }';
+  const COMMON = `
+precision highp float;
+varying vec2 v;
+const float VM = 0.012;   // 流速编码上限(uv/步)；8 位纹理里 128 = 静止
+vec2 dec(vec2 s){ return (s*255.0 - 128.0) / 127.0 * VM; }
+vec2 enc(vec2 u){ return (128.0 + clamp(u / VM, -1.0, 1.0) * 127.0) / 255.0; }
+float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float noise(vec2 p){
+  vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+  return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y);
+}
+float fbm(vec2 p){
+  float s = 0.0, a = 0.5;
+  for(int i = 0; i < 5; i++){ s += a * noise(p); p = mat2(1.6, 1.2, -1.2, 1.6) * p; a *= 0.5; }
+  return s;
+}`;
 
-  // 终点：顶栏胶囊里真实元素的位置
-  const C = rel(capsule), CA = rel(document.getElementById('cap-avatar')), CN = rel(document.getElementById('cap-name'));
-  const capFont = parseFloat(getComputedStyle(document.getElementById('cap-name')).fontSize) || 16;
+  // —— 模拟：平流 + 晕染扩散 + 手指注墨 + 衰减复原 ——
+  const SIM = COMMON + `
+uniform sampler2D uS; uniform vec2 uPx; uniform float uAsp, uT;
+uniform vec2 uA, uB, uVel; uniform float uR, uAmt, uDecay;
+void main(){
+  vec2 vel = dec(texture2D(uS, v).gb);
+  // 环境涡流：一张缓慢流动的旋度噪声场，把晕开的墨持续拉成丝(大理石流纹的来源)
+  vec2 cp = v * vec2(uAsp, 1.0) * 2.4 + uT * 0.03; float ce = 0.02;
+  vec2 curl = vec2(fbm(cp + vec2(0.0, ce)) - fbm(cp - vec2(0.0, ce)), -(fbm(cp + vec2(ce, 0.0)) - fbm(cp - vec2(ce, 0.0)))) / (2.0 * ce);
+  vec2 p = v - vel - curl * 0.0016 / vec2(uAsp, 1.0);   // 半拉格朗日平流：墨顺着手势和涡流被带走
+  vec4 s = texture2D(uS, p);
+  float m = s.r; vel = dec(s.gb);
+  float l = texture2D(uS, p - vec2(uPx.x, 0.0)).r, r = texture2D(uS, p + vec2(uPx.x, 0.0)).r;
+  float d = texture2D(uS, p - vec2(0.0, uPx.y)).r, u = texture2D(uS, p + vec2(0.0, uPx.y)).r;
+  // 晕染：向四周洇开，速率被纤维状噪声调制 → 边缘像宣纸吸墨一样参差
+  float fib = fbm(v * vec2(uAsp, 1.0) * 9.0 + vec2(uT * 0.02, 0.0));
+  m = mix(m, (l + r + d + u) * 0.25, 0.22);
+  m = max(m, max(max(l, r), max(d, u)) * (0.84 + 0.12 * fib) - 0.005);
+  // 墨里带一点自己的涡流，晕开的形状不会是死板的圆
+  vel += (vec2(noise(v * 7.0 + uT * 0.1), noise(v * 7.0 - uT * 0.1 + 9.0)) - 0.5) * 0.0006 * m;
+  // 手指：沿本步划过的线段注入墨和速度
+  vec2 k = vec2(uAsp, 1.0), q = v * k, a = uA * k, ab = uB * k - a;
+  float h = clamp(dot(q - a, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
+  float dist = length(q - a - ab * h);
+  float sp = exp(-dist * dist / (uR * uR)) * step(0.0001, uAmt);
+  m = min(1.0, m + sp * uAmt);
+  vel = mix(vel, uVel, sp * 0.7);
+  vel *= 0.962;
+  m = max(0.0, m - uDecay);
+  gl_FragColor = vec4(m, enc(vel), 1.0);
+}`;
 
-  const timers = [], anims = [];
-  const later = (ms, fn) => timers.push(setTimeout(fn, ms));
-  const anim = (el, kf, opt) => { const a = el.animate(kf, Object.assign({ fill: 'both' }, opt)); anims.push(a); return a; };
-  const SPRING = 'cubic-bezier(.2,1.3,.4,1)', MORPH = 'cubic-bezier(.72,0,.22,1)';
+  // —— 画面：星空 / 水墨 / 镭射 三层按墨浓度依次露出 ——
+  const DRAW = COMMON + `
+uniform sampler2D uS; uniform vec2 uRes, uSim; uniform float uT; uniform vec3 uExit;
+vec3 stars(vec2 p){
+  vec3 c = vec3(0.010, 0.011, 0.018) + vec3(0.035) * smoothstep(0.55, 0.95, fbm(p * 1.3 + 3.0));
+  for(int i = 0; i < 2; i++){
+    float sc = i == 0 ? 90.0 : 210.0;
+    vec2 cell = floor(p * sc), f = fract(p * sc);
+    float r = hash(cell + float(i) * 17.0);
+    if(r > 0.93){
+      vec2 o = vec2(hash(cell + 3.1), hash(cell + 7.7)) * 0.6 + 0.2;
+      float tw = 0.55 + 0.45 * sin(uT * (1.0 + r * 3.0) + r * 40.0);
+      float b = smoothstep(0.16, 0.0, length(f - o)) * tw * (i == 0 ? 1.0 : 0.6);
+      c += vec3(0.92, 0.95, 1.0) * b;
+    }
+  }
+  return c;
+}
+// 共享的大理石流场：水墨和镭射都顺着同一套流纹走，露出来的形状也跟着流纹
+float marble(vec2 p, out vec2 q){
+  q = vec2(fbm(p * 1.1 + uT * 0.015), fbm(p * 1.1 + vec2(5.2, 1.3) - uT * 0.012));
+  vec2 r = vec2(fbm(p * 1.3 + q * 3.0 + vec2(1.7, 9.2)), fbm(p * 1.3 + q * 3.0 + vec2(8.3, 2.8)));
+  return fbm(p * 1.2 + r * 2.4);
+}
+vec3 ink(vec2 p, float f, vec2 q){
+  float gv = mix(0.20, 0.70, smoothstep(0.28, 0.78, f));
+  float w = f * 46.0 + q.x * 9.0;
+  gv -= 0.20 * smoothstep(0.82, 1.0, sin(w));               // 细黑流线
+  gv += 0.16 * smoothstep(0.90, 1.0, sin(w * 0.5 + 1.7));   // 细白流线
+  gv += (noise(p * 60.0) - 0.5) * 0.04;                      // 纸纹颗粒
+  return vec3(gv) * vec3(0.97, 0.985, 1.03);
+}
+vec3 holo(vec2 p, float f, vec2 q){
+  float hue = f * 3.2 + q.y * 1.5 + p.x * 0.25 + uT * 0.04;
+  vec3 iri = 0.5 + 0.5 * cos(6.2832 * (hue + vec3(0.0, 0.33, 0.67)));
+  iri = mix(iri, vec3(0.92, 0.95, 1.0), 0.38);                // 粉彩化
+  float band = smoothstep(0.35, 0.75, fbm(p * 2.2 + q * 2.0 - uT * 0.02));
+  vec3 silver = vec3(0.70, 0.72, 0.78) + 0.12 * sin(f * 30.0);
+  return mix(silver, iri, 0.25 + 0.75 * band);                // 镭射是银底上一条条的彩光
+}
+float mask(vec2 uv, vec2 px){
+  // 4 点轻模糊，消掉低分辨率模拟的块状边
+  return 0.25 * (texture2D(uS, uv + vec2(px.x, px.y)).r + texture2D(uS, uv + vec2(-px.x, px.y)).r
+              + texture2D(uS, uv + vec2(px.x, -px.y)).r + texture2D(uS, uv - px).r);
+}
+void main(){
+  vec2 uv = gl_FragCoord.xy / uRes;
+  float asp = uRes.x / uRes.y;
+  vec2 p = uv * vec2(asp, 1.0) * 2.2;
+  vec2 q; float f = marble(p, q);
+  // 取墨时顺着流场偏一点 → 墨边被流纹拉成丝
+  float m = mask(uv + (q - 0.5) * 0.07, vec2(1.2) / uSim);
+  if(uExit.z > 0.0){
+    float d = length((uv - uExit.xy) * vec2(asp, 1.0));
+    m += max(0.0, uExit.z * 3.4 - d * 1.2);                     // 离场：从点击处整片晕开
+  }
+  float grain = (noise(p * 34.0) - 0.5) * 0.06;
+  // 墨淡时只有流纹最亮处先透出来，墨越浓露得越多
+  float a1 = smoothstep(0.30, 0.36, m * 1.3 + (f - 0.5) * 1.3 + grain);   // 星空 → 灰墨
+  float a2 = smoothstep(0.86, 0.92, m * 1.3 + (f - 0.5) * 1.9 + grain);   // 灰墨 → 镭射
+  vec3 col = stars(p);
+  col = mix(col, ink(p, f, q), a1);
+  col *= 1.0 - a1 * (1.0 - a1) * 4.0 * 0.5;                        // 墨边一圈暗线
+  col = mix(col, holo(p, f, q), a2);
+  col += vec3(1.0) * a2 * (1.0 - a2) * 4.0 * 0.18;                 // 镭射边一道亮线
+  col *= 1.0 - a2 * 0.28 * smoothstep(0.80, 1.0, sin(f * 46.0 + q.x * 9.0));   // 镭射上也压着同一套流线
+  float alpha = 1.0 - smoothstep(2.3, 2.45, m * 1.3 + (f - 0.5) * 1.3);   // 只有离场时会透出聊天
+  gl_FragColor = vec4(col * alpha, alpha);
+}`;
 
-  // ① 浮现：玻璃球弹出，头像和名字跟着淡入
-  const s0 = O * 0.5;
-  anim(orb, [box(cx - s0/2, cy - s0/2, s0, s0), box(cx - O/2, cy - O/2, O, O)], { duration: 820, easing: SPRING });
-  anim(av, [{ opacity: 0, transform: 'scale(.7)' }, { opacity: 1, transform: 'none' }], { duration: 620, delay: 120, easing: SPRING });
-  anim(nm, [{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 600, delay: 260, easing: 'ease-out' });
+  const sh = (t, src) => { const s = g.createShader(t); g.shaderSource(s, src); g.compileShader(s);
+    if(!g.getShaderParameter(s, g.COMPILE_STATUS)) throw new Error(g.getShaderInfoLog(s)); return s; };
+  const program = (fs, names) => {
+    const pr = g.createProgram(); g.attachShader(pr, sh(g.VERTEX_SHADER, VS)); g.attachShader(pr, sh(g.FRAGMENT_SHADER, fs));
+    g.bindAttribLocation(pr, 0, 'a'); g.linkProgram(pr);
+    if(!g.getProgramParameter(pr, g.LINK_STATUS)) throw new Error(g.getProgramInfoLog(pr));
+    const u = {}; names.forEach(n => u[n] = g.getUniformLocation(pr, n)); return { pr, u };
+  };
+  let sim, draw;
+  try {
+    sim = program(SIM, ['uS','uPx','uAsp','uT','uA','uB','uVel','uR','uAmt','uDecay']);
+    draw = program(DRAW, ['uS','uRes','uSim','uT','uExit']);
+  } catch(err){ console.warn('开屏着色器失败：', err); cleanup(); revealUI(false); return; }
+  const buf = g.createBuffer(); g.bindBuffer(g.ARRAY_BUFFER, buf);
+  g.bufferData(g.ARRAY_BUFFER, new Float32Array([-1,-1,3,-1,-1,3]), g.STATIC_DRAW);
+  g.enableVertexAttribArray(0); g.vertexAttribPointer(0, 2, g.FLOAT, false, 0, 0);
 
-  // ② 变形：球 → 胶囊，头像/名字飞到顶栏
-  const T = 1550, D = 760;
-  later(T, () => {
-    anim(orb, [box(cx - O/2, cy - O/2, O, O), box(C.x, C.y, C.w, C.h)], { duration: D, easing: MORPH });
-    anim(av, [Object.assign(box(cx - A/2, cy - A/2, A, A), { fontSize: A * 0.47 + 'px' }),
-              Object.assign(box(CA.x, CA.y, CA.w, CA.h), { fontSize: CA.w * 0.47 + 'px' })], { duration: D, easing: MORPH });
-    anim(nm, [{ left: cx - nmW/2 + 'px', top: cy + O/2 + 22 + 'px', fontSize: F0 + 'px' },
-              { left: CN.x + 'px', top: CN.y + 'px', fontSize: capFont + 'px' }], { duration: D, easing: MORPH });
+  // 画布尺寸：画面最多 1.5 倍像素(着色器较重)，模拟用 1/3 分辨率
+  const R = phone.getBoundingClientRect();
+  const DPR = Math.min(devicePixelRatio || 1, 1.5);
+  cv.width = Math.round(R.width * DPR); cv.height = Math.round(R.height * DPR);
+  const SW = Math.max(32, Math.round(R.width / 3)), SH = Math.max(32, Math.round(R.height / 3));
+  const asp = R.width / R.height;
+  const target = () => {
+    const t = g.createTexture(); g.bindTexture(g.TEXTURE_2D, t);
+    g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, SW, SH, 0, g.RGBA, g.UNSIGNED_BYTE, null);
+    [g.TEXTURE_MIN_FILTER, g.TEXTURE_MAG_FILTER].forEach(k => g.texParameteri(g.TEXTURE_2D, k, g.LINEAR));
+    [g.TEXTURE_WRAP_S, g.TEXTURE_WRAP_T].forEach(k => g.texParameteri(g.TEXTURE_2D, k, g.CLAMP_TO_EDGE));
+    const f = g.createFramebuffer(); g.bindFramebuffer(g.FRAMEBUFFER, f);
+    g.framebufferTexture2D(g.FRAMEBUFFER, g.COLOR_ATTACHMENT0, g.TEXTURE_2D, t, 0);
+    g.clearColor(0, 128/255, 128/255, 1); g.clear(g.COLOR_BUFFER_BIT);
+    return { t, f };
+  };
+  let A = target(), B = target();
+
+  // —— 手势 → 每步要注入的线段 ——
+  let pend = null, last = null, down = null, exitAt = null, exitStart = 0;
+  const toUV = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, 1 - (e.clientY - r.top) / r.height]; };
+  const push = (pt, amt) => { if(!last) last = pt; if(!pend) pend = { a: last, b: pt, amt }; else { pend.b = pt; pend.amt = Math.max(pend.amt, amt); } last = pt; };
+  splash.addEventListener('pointerdown', e => {
+    if(exitAt) return;
+    splash.setPointerCapture(e.pointerId);
+    last = toUV(e); down = { t: performance.now(), x: e.clientX, y: e.clientY, moved: 0 };
+    push(last, 0.28);
   });
+  splash.addEventListener('pointermove', e => {
+    if(!down || exitAt) return;
+    down.moved = Math.max(down.moved, Math.hypot(e.clientX - down.x, e.clientY - down.y));
+    if(down.moved > 8) hint.classList.add('gone');
+    push(toUV(e), 0.7);
+  });
+  const up = e => {
+    if(!down) return;
+    if(e.type === 'pointerup' && down.moved < 10 && performance.now() - down.t < 350) startExit(toUV(e));
+    down = null; last = null;
+  };
+  splash.addEventListener('pointerup', up);
+  splash.addEventListener('pointercancel', up);
 
-  // ③ 其余界面登场
-  later(T + 260, () => {
-    menuBtn.classList.remove('gl-off');
-    anim(menuBtn, [{ opacity: 0, transform: 'scale(.3)' }, { opacity: 1, transform: 'none' }], { duration: 560, easing: SPRING, fill: 'backwards' });
+  // 开场自动"划"一笔做示范
+  const t0 = performance.now(), INTRO = 1300;
+  const introPt = t => [0.12 + 0.76 * t, 0.56 + 0.10 * Math.sin(t * 5.5) - 0.08 * t];
+  let introLast = null;
+
+  function step(now){
+    if(now - t0 < INTRO && !down && !exitAt){
+      const pt = introPt((now - t0) / INTRO);
+      pend = { a: introLast || pt, b: pt, amt: 0.6 }; introLast = pt;
+    }
+    const s = pend; pend = null;
+    g.useProgram(sim.pr);
+    g.bindFramebuffer(g.FRAMEBUFFER, B.f); g.viewport(0, 0, SW, SH);
+    g.activeTexture(g.TEXTURE0); g.bindTexture(g.TEXTURE_2D, A.t);
+    g.uniform1i(sim.u.uS, 0);
+    g.uniform2f(sim.u.uPx, 1 / SW, 1 / SH);
+    g.uniform1f(sim.u.uAsp, asp);
+    g.uniform1f(sim.u.uT, (now - t0) / 1000);
+    g.uniform1f(sim.u.uR, 0.06);
+    g.uniform1f(sim.u.uDecay, 0.0028);
+    if(s){
+      g.uniform2f(sim.u.uA, s.a[0], s.a[1]); g.uniform2f(sim.u.uB, s.b[0], s.b[1]);
+      g.uniform2f(sim.u.uVel, (s.b[0] - s.a[0]) * 0.5, (s.b[1] - s.a[1]) * 0.5);
+      g.uniform1f(sim.u.uAmt, s.amt);
+    } else g.uniform1f(sim.u.uAmt, 0);
+    g.drawArrays(g.TRIANGLES, 0, 3);
+    const tmp = A; A = B; B = tmp;
+  }
+
+  let acc = 0, prev = performance.now(), raf = 0;
+  const STEP = 1000 / 60;   // 固定步长：120Hz 屏上晕染速度也一样
+  function loop(now){
+    acc += Math.min(now - prev, 100); prev = now;
+    let k = 0; while(acc >= STEP && k < 4){ step(now); acc -= STEP; k++; }
+    if(k === 4) acc = 0;
+    const ex = exitAt ? Math.min(1, (now - exitStart) / 1100) : 0;
+    g.useProgram(draw.pr);
+    g.bindFramebuffer(g.FRAMEBUFFER, null); g.viewport(0, 0, cv.width, cv.height);
+    g.activeTexture(g.TEXTURE0); g.bindTexture(g.TEXTURE_2D, A.t);
+    g.uniform1i(draw.u.uS, 0);
+    g.uniform2f(draw.u.uRes, cv.width, cv.height);
+    g.uniform2f(draw.u.uSim, SW, SH);
+    g.uniform1f(draw.u.uT, (now - t0) / 1000);
+    g.uniform3f(draw.u.uExit, exitAt ? exitAt[0] : 0, exitAt ? exitAt[1] : 0, ex * ex);
+    g.drawArrays(g.TRIANGLES, 0, 3);
+    if(ex >= 1){ cleanup(); return; }
+    raf = requestAnimationFrame(loop);
+  }
+  raf = requestAnimationFrame(loop);
+
+  function startExit(pt){
+    if(exitAt) return;
+    exitAt = pt; exitStart = performance.now();
+    hint.classList.add('gone');
+    splash.style.background = 'transparent';   // 底色只用来垫首帧，离场时要透出聊天
+    glPaused = false;
+    setTimeout(() => revealUI(true), 380);
+  }
+  function cleanup(){
+    cancelAnimationFrame(raf);
+    glPaused = false;
+    splash.remove();
+    const lose = g.getExtension('WEBGL_lose_context'); if(lose) lose.loseContext();
+  }
+
+  // 聊天界面登场：顶栏弹出，输入框滑上来，可见气泡自下而上长出来
+  function revealUI(animate){
+    phone.classList.remove('booting');
+    if(!animate){ offs.forEach(el => el.classList.remove('gl-off')); return; }
+    const SPRING = 'cubic-bezier(.2,1.3,.4,1)';
+    const pop = (el, delay) => { el.classList.remove('gl-off');
+      el.animate([{ opacity: 0, transform: 'scale(.4)' }, { opacity: 1, transform: 'none' }], { duration: 560, delay, easing: SPRING, fill: 'backwards' }); };
+    pop(menuBtn, 0); pop(capsule, 60);
     composer.classList.remove('gl-off');
-    anim(composer, [{ opacity: 0, transform: 'translateY(120px)' }, { opacity: 1, transform: 'none' }], { duration: 640, easing: 'cubic-bezier(.2,.9,.25,1)', fill: 'backwards' });
-    // 只给视口里看得见的气泡做动画，从最下面一条开始往上冒
+    composer.animate([{ opacity: 0, transform: 'translateY(120px)' }, { opacity: 1, transform: 'none' }], { duration: 640, easing: 'cubic-bezier(.2,.9,.25,1)', fill: 'backwards' });
     const V = viewport.getBoundingClientRect();
     const visible = rows.filter(r => { const b = r.getBoundingClientRect(); return b.bottom > V.top && b.top < V.bottom; }).reverse();
     rows.forEach(r => { if(!visible.includes(r)) r.classList.remove('gl-off'); });
-    visible.forEach((r, i) => later(120 + i * 55, () => {
+    visible.forEach((r, i) => setTimeout(() => {
       r.classList.remove('gl-off');
       r.style.transformOrigin = r.classList.contains('right') ? 'right center' : 'left center';
-      anim(r, [{ opacity: 0, transform: 'translateY(14px) scale(.6)' }, { opacity: 1, transform: 'none' }], { duration: 480, easing: SPRING, fill: 'none' });
-    }));
-  });
-
-  // 球已和胶囊重合 → 换成真胶囊，开屏层撤掉(气泡/输入框的登场动画继续播完)
-  function end(){
-    capsule.classList.remove('gl-off');
-    phone.classList.remove('booting');
-    splash.remove();
+      r.animate([{ opacity: 0, transform: 'translateY(14px) scale(.6)' }, { opacity: 1, transform: 'none' }], { duration: 480, easing: SPRING });
+    }, 80 + i * 55));
   }
-  later(T + D + 20, end);
-  // 点一下跳过：所有动画直接到终态
-  splash.addEventListener('click', () => {
-    timers.forEach(clearTimeout);
-    anims.forEach(a => a.cancel());
-    offs.forEach(el => el.classList.remove('gl-off'));
-    end();
-  });
 })();
 
 /* 启动 WebGL */
