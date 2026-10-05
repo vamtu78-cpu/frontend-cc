@@ -1651,7 +1651,9 @@ applyAvatars();
    三层画面(上→下)：黑色星空 / 灰色水墨 / 镭射。全部由着色器实时生成，不需要素材图。
    手指划过的地方像墨在宣纸上洇开：先露出灰墨，越浓的地方再露出底下的镭射；
    松手后墨慢慢退回去，星空复原。轻点一下 → 从点击处整片晕开，露出聊天界面。
-   晕染本身是一张低分辨率的小流体：R=墨浓度，GB=流速，每步做平流 + 扩散 + 衰减。 */
+   手指只在水面上划出一道细线，但会激起水波纹往外扩：波纹扫过的地方墨被带着洇开，
+   画面也随波面折射晃动。最浓的线芯里透出最底下的一层白。
+   模拟是一张低分辨率纹理：R=墨浓度，G=水面高度，B=上一步高度(都以 0.5 为零点)。 */
 let glPaused = false;   // 开屏完全遮住时，聊天界面的玻璃暂停绘制，省 GPU
 (function inkSplash(){
   if(matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -1678,9 +1680,6 @@ let glPaused = false;   // 开屏完全遮住时，聊天界面的玻璃暂停�
   const COMMON = `
 precision highp float;
 varying vec2 v;
-const float VM = 0.012;   // 流速编码上限(uv/步)；8 位纹理里 128 = 静止
-vec2 dec(vec2 s){ return (s*255.0 - 128.0) / 127.0 * VM; }
-vec2 enc(vec2 u){ return (128.0 + clamp(u / VM, -1.0, 1.0) * 127.0) / 255.0; }
 float hash(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float noise(vec2 p){
   vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
@@ -1692,36 +1691,40 @@ float fbm(vec2 p){
   return s;
 }`;
 
-  // —— 模拟：平流 + 晕染扩散 + 手指注墨 + 衰减复原 ——
+  // —— 模拟：水波 + 墨(涡流平流、随波纹洇开、衰减复原) + 手指 ——
   const SIM = COMMON + `
 uniform sampler2D uS; uniform vec2 uPx; uniform float uAsp, uT;
-uniform vec2 uA, uB, uVel; uniform float uR, uAmt, uDecay;
+uniform vec2 uA, uB; uniform float uR, uAmt, uWave, uDecay;
 void main(){
-  vec2 vel = dec(texture2D(uS, v).gb);
-  // 环境涡流：一张缓慢流动的旋度噪声场，把晕开的墨持续拉成丝(大理石流纹的来源)
+  vec4 c = texture2D(uS, v);
+  // ① 水波：经典两帧波动方程，每次传播一格，阻尼让波纹慢慢平息
+  float hl = texture2D(uS, v - vec2(uPx.x, 0.0)).g, hr = texture2D(uS, v + vec2(uPx.x, 0.0)).g;
+  float hd = texture2D(uS, v - vec2(0.0, uPx.y)).g, hu = texture2D(uS, v + vec2(0.0, uPx.y)).g;
+  float h0 = c.g - 0.5;
+  float h = ((hl + hr + hd + hu) - 2.0) * 0.5 - (c.b - 0.5);
+  h = mix(h, ((hl + hr + hd + hu) - 2.0) * 0.25, 0.03);   // 轻微抹平，去掉格子状的高频噪声
+  h *= 0.985;
+  vec2 grad = vec2(hr - hl, hu - hd);
+  // ② 墨：顺着缓慢的环境涡流漂，被拉成丝
   vec2 cp = v * vec2(uAsp, 1.0) * 2.4 + uT * 0.03; float ce = 0.02;
   vec2 curl = vec2(fbm(cp + vec2(0.0, ce)) - fbm(cp - vec2(0.0, ce)), -(fbm(cp + vec2(ce, 0.0)) - fbm(cp - vec2(ce, 0.0)))) / (2.0 * ce);
-  vec2 p = v - vel - curl * 0.0016 / vec2(uAsp, 1.0);   // 半拉格朗日平流：墨顺着手势和涡流被带走
-  vec4 s = texture2D(uS, p);
-  float m = s.r; vel = dec(s.gb);
+  vec2 p = v - curl * 0.0009 / vec2(uAsp, 1.0);
+  float m = texture2D(uS, p).r;
   float l = texture2D(uS, p - vec2(uPx.x, 0.0)).r, r = texture2D(uS, p + vec2(uPx.x, 0.0)).r;
   float d = texture2D(uS, p - vec2(0.0, uPx.y)).r, u = texture2D(uS, p + vec2(0.0, uPx.y)).r;
-  // 晕染：向四周洇开，速率被纤维状噪声调制 → 边缘像宣纸吸墨一样参差
+  // 晕染：波纹经过的地方洇得更快更开，纤维噪声让边缘参差
   float fib = fbm(v * vec2(uAsp, 1.0) * 9.0 + vec2(uT * 0.02, 0.0));
-  m = mix(m, (l + r + d + u) * 0.25, 0.22);
-  m = max(m, max(max(l, r), max(d, u)) * (0.84 + 0.12 * fib) - 0.005);
-  // 墨里带一点自己的涡流，晕开的形状不会是死板的圆
-  vel += (vec2(noise(v * 7.0 + uT * 0.1), noise(v * 7.0 - uT * 0.1 + 9.0)) - 0.5) * 0.0006 * m;
-  // 手指：沿本步划过的线段注入墨和速度
+  float energy = clamp(abs(h0) * 16.0 + length(grad) * 12.0, 0.0, 1.0);
+  m = mix(m, (l + r + d + u) * 0.25, 0.2 + 0.3 * energy);
+  m = max(m, max(max(l, r), max(d, u)) * (0.78 + 0.10 * fib + 0.14 * energy) - 0.004);
+  // ③ 手指：注墨的线很细，按下水面的范围稍宽 → 激起往外扩的波纹
   vec2 k = vec2(uAsp, 1.0), q = v * k, a = uA * k, ab = uB * k - a;
-  float h = clamp(dot(q - a, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
-  float dist = length(q - a - ab * h);
-  float sp = exp(-dist * dist / (uR * uR)) * step(0.0001, uAmt);
-  m = min(1.0, m + sp * uAmt);
-  vel = mix(vel, uVel, sp * 0.7);
-  vel *= 0.962;
+  float t = clamp(dot(q - a, ab) / max(dot(ab, ab), 1e-6), 0.0, 1.0);
+  float dist = length(q - a - ab * t);
+  m = min(1.0, m + exp(-dist * dist / (uR * uR)) * uAmt);
+  h -= exp(-dist * dist / (9.0 * uR * uR)) * uWave;
   m = max(0.0, m - uDecay);
-  gl_FragColor = vec4(m, enc(vel), 1.0);
+  gl_FragColor = vec4(m, clamp(h + 0.5, 0.0, 1.0), h0 + 0.5, 1.0);
 }`;
 
   // —— 画面：星空 / 水墨 / 镭射 三层按墨浓度依次露出 ——
@@ -1770,27 +1773,39 @@ float mask(vec2 uv, vec2 px){
               + texture2D(uS, uv + vec2(px.x, -px.y)).r + texture2D(uS, uv - px).r);
 }
 void main(){
-  vec2 uv = gl_FragCoord.xy / uRes;
+  vec2 uv0 = gl_FragCoord.xy / uRes;
   float asp = uRes.x / uRes.y;
+  // 水面折射：按波面坡度把所有图层轻轻错开，波纹扫过时画面跟着晃
+  vec2 px = 1.0 / uSim;
+  vec2 grad = vec2(texture2D(uS, uv0 + vec2(px.x, 0.0)).g - texture2D(uS, uv0 - vec2(px.x, 0.0)).g,
+                   texture2D(uS, uv0 + vec2(0.0, px.y)).g - texture2D(uS, uv0 - vec2(0.0, px.y)).g);
+  vec2 uv = uv0 + grad * 0.03;
   vec2 p = uv * vec2(asp, 1.0) * 2.2;
   vec2 q; float f = marble(p, q);
   // 取墨时顺着流场偏一点 → 墨边被流纹拉成丝
-  float m = mask(uv + (q - 0.5) * 0.07, vec2(1.2) / uSim);
+  float m = mask(uv + (q - 0.5) * 0.07, px * 1.2);
   if(uExit.z > 0.0){
     float d = length((uv - uExit.xy) * vec2(asp, 1.0));
-    m += max(0.0, uExit.z * 3.4 - d * 1.2);                     // 离场：从点击处整片晕开
+    m += max(0.0, uExit.z * 4.2 - d * 1.2);                     // 离场：从点击处整片晕开
   }
+  float wave = 0.12 * smoothstep(0.01, 0.06, length(grad));      // 波峰上也会短暂透出一点
   float grain = (noise(p * 34.0) - 0.5) * 0.06;
+  float e = m * 1.3 + wave + grain;
   // 墨淡时只有流纹最亮处先透出来，墨越浓露得越多
-  float a1 = smoothstep(0.30, 0.36, m * 1.3 + (f - 0.5) * 1.3 + grain);   // 星空 → 灰墨
-  float a2 = smoothstep(0.86, 0.92, m * 1.3 + (f - 0.5) * 1.9 + grain);   // 灰墨 → 镭射
+  float a1 = smoothstep(0.30, 0.36, e + (f - 0.5) * 1.3);        // 星空 → 灰墨
+  float a2 = smoothstep(0.86, 0.92, e + (f - 0.5) * 1.9);        // 灰墨 → 镭射
+  float a3 = smoothstep(1.18, 1.30, e + (f - 0.5) * 0.6);        // 镭射 → 最底下的白
   vec3 col = stars(p);
   col = mix(col, ink(p, f, q), a1);
   col *= 1.0 - a1 * (1.0 - a1) * 4.0 * 0.5;                        // 墨边一圈暗线
   col = mix(col, holo(p, f, q), a2);
   col += vec3(1.0) * a2 * (1.0 - a2) * 4.0 * 0.18;                 // 镭射边一道亮线
-  col *= 1.0 - a2 * 0.28 * smoothstep(0.80, 1.0, sin(f * 46.0 + q.x * 9.0));   // 镭射上也压着同一套流线
-  float alpha = 1.0 - smoothstep(2.3, 2.45, m * 1.3 + (f - 0.5) * 1.3);   // 只有离场时会透出聊天
+  col *= 1.0 - a2 * (1.0 - a3) * 0.28 * smoothstep(0.80, 1.0, sin(f * 46.0 + q.x * 9.0));   // 镭射上也压着同一套流线
+  col = mix(col, vec3(0.97, 0.975, 1.0), a3);
+  // 波峰高光：迎光的坡面亮一下，星空上也能看到一圈圈水纹
+  vec3 n = normalize(vec3(-grad * 70.0, 1.0));
+  col += vec3(0.9, 0.95, 1.0) * pow(max(dot(n, normalize(vec3(-0.35, 0.5, 1.0))), 0.0), 40.0) * 0.55;
+  float alpha = 1.0 - smoothstep(2.6, 2.75, m * 1.3 + (f - 0.5) * 1.3);   // 只有离场时会透出聊天
   gl_FragColor = vec4(col * alpha, alpha);
 }`;
 
@@ -1804,7 +1819,7 @@ void main(){
   };
   let sim, draw;
   try {
-    sim = program(SIM, ['uS','uPx','uAsp','uT','uA','uB','uVel','uR','uAmt','uDecay']);
+    sim = program(SIM, ['uS','uPx','uAsp','uT','uA','uB','uR','uAmt','uWave','uDecay']);
     draw = program(DRAW, ['uS','uRes','uSim','uT','uExit']);
   } catch(err){ console.warn('开屏着色器失败：', err); cleanup(); revealUI(false); return; }
   const buf = g.createBuffer(); g.bindBuffer(g.ARRAY_BUFFER, buf);
@@ -1817,14 +1832,21 @@ void main(){
   cv.width = Math.round(R.width * DPR); cv.height = Math.round(R.height * DPR);
   const SW = Math.max(32, Math.round(R.width / 3)), SH = Math.max(32, Math.round(R.height / 3));
   const asp = R.width / R.height;
+  // 水波需要精度：能用半精度浮点纹理就用(iOS 都支持)，不行退回 8 位
+  let TYPE = g.UNSIGNED_BYTE;
+  const hf = g.getExtension('OES_texture_half_float');
+  if(hf && g.getExtension('OES_texture_half_float_linear')){ g.getExtension('EXT_color_buffer_half_float'); TYPE = hf.HALF_FLOAT_OES; }
   const target = () => {
     const t = g.createTexture(); g.bindTexture(g.TEXTURE_2D, t);
-    g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, SW, SH, 0, g.RGBA, g.UNSIGNED_BYTE, null);
+    g.texImage2D(g.TEXTURE_2D, 0, g.RGBA, SW, SH, 0, g.RGBA, TYPE, null);
     [g.TEXTURE_MIN_FILTER, g.TEXTURE_MAG_FILTER].forEach(k => g.texParameteri(g.TEXTURE_2D, k, g.LINEAR));
     [g.TEXTURE_WRAP_S, g.TEXTURE_WRAP_T].forEach(k => g.texParameteri(g.TEXTURE_2D, k, g.CLAMP_TO_EDGE));
     const f = g.createFramebuffer(); g.bindFramebuffer(g.FRAMEBUFFER, f);
     g.framebufferTexture2D(g.FRAMEBUFFER, g.COLOR_ATTACHMENT0, g.TEXTURE_2D, t, 0);
-    g.clearColor(0, 128/255, 128/255, 1); g.clear(g.COLOR_BUFFER_BIT);
+    if(g.checkFramebufferStatus(g.FRAMEBUFFER) !== g.FRAMEBUFFER_COMPLETE && TYPE !== g.UNSIGNED_BYTE){
+      TYPE = g.UNSIGNED_BYTE; return target();
+    }
+    g.clearColor(0, 0.5, 0.5, 1); g.clear(g.COLOR_BUFFER_BIT);
     return { t, f };
   };
   let A = target(), B = target();
@@ -1832,18 +1854,19 @@ void main(){
   // —— 手势 → 每步要注入的线段 ——
   let pend = null, last = null, down = null, exitAt = null, exitStart = 0;
   const toUV = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, 1 - (e.clientY - r.top) / r.height]; };
-  const push = (pt, amt) => { if(!last) last = pt; if(!pend) pend = { a: last, b: pt, amt }; else { pend.b = pt; pend.amt = Math.max(pend.amt, amt); } last = pt; };
+  const push = (pt, amt, wave) => { if(!last) last = pt; if(!pend) pend = { a: last, b: pt, amt, wave }; else { pend.b = pt; pend.amt = Math.max(pend.amt, amt); pend.wave = Math.max(pend.wave, wave); } last = pt; };
   splash.addEventListener('pointerdown', e => {
     if(exitAt) return;
     splash.setPointerCapture(e.pointerId);
     last = toUV(e); down = { t: performance.now(), x: e.clientX, y: e.clientY, moved: 0 };
-    push(last, 0.28);
+    push(last, 0.5, 0.35);   // 按下：一滴墨 + 一圈水纹
   });
   splash.addEventListener('pointermove', e => {
     if(!down || exitAt) return;
     down.moved = Math.max(down.moved, Math.hypot(e.clientX - down.x, e.clientY - down.y));
     if(down.moved > 8) hint.classList.add('gone');
-    push(toUV(e), 0.7);
+    const pt = toUV(e), sp = last ? Math.hypot((pt[0] - last[0]) * asp, pt[1] - last[1]) : 0;
+    push(pt, 0.6, Math.min(0.22, 0.05 + sp * 3.0));   // 划得越快，激起的波越大
   });
   const up = e => {
     if(!down) return;
@@ -1861,25 +1884,27 @@ void main(){
   function step(now){
     if(now - t0 < INTRO && !down && !exitAt){
       const pt = introPt((now - t0) / INTRO);
-      pend = { a: introLast || pt, b: pt, amt: 0.6 }; introLast = pt;
+      pend = { a: introLast || pt, b: pt, amt: 0.6, wave: 0.12 }; introLast = pt;
     }
     const s = pend; pend = null;
     g.useProgram(sim.pr);
-    g.bindFramebuffer(g.FRAMEBUFFER, B.f); g.viewport(0, 0, SW, SH);
-    g.activeTexture(g.TEXTURE0); g.bindTexture(g.TEXTURE_2D, A.t);
-    g.uniform1i(sim.u.uS, 0);
     g.uniform2f(sim.u.uPx, 1 / SW, 1 / SH);
     g.uniform1f(sim.u.uAsp, asp);
     g.uniform1f(sim.u.uT, (now - t0) / 1000);
-    g.uniform1f(sim.u.uR, 0.06);
-    g.uniform1f(sim.u.uDecay, 0.0028);
-    if(s){
-      g.uniform2f(sim.u.uA, s.a[0], s.a[1]); g.uniform2f(sim.u.uB, s.b[0], s.b[1]);
-      g.uniform2f(sim.u.uVel, (s.b[0] - s.a[0]) * 0.5, (s.b[1] - s.a[1]) * 0.5);
-      g.uniform1f(sim.u.uAmt, s.amt);
-    } else g.uniform1f(sim.u.uAmt, 0);
-    g.drawArrays(g.TRIANGLES, 0, 3);
-    const tmp = A; A = B; B = tmp;
+    g.uniform1f(sim.u.uR, 0.011);
+    g.uniform1f(sim.u.uDecay, 0.0015);
+    // 每步跑两次：波纹传得更快；手指只在第一次注入
+    for(let i = 0; i < 2; i++){
+      g.bindFramebuffer(g.FRAMEBUFFER, B.f); g.viewport(0, 0, SW, SH);
+      g.activeTexture(g.TEXTURE0); g.bindTexture(g.TEXTURE_2D, A.t);
+      g.uniform1i(sim.u.uS, 0);
+      if(s && i === 0){
+        g.uniform2f(sim.u.uA, s.a[0], s.a[1]); g.uniform2f(sim.u.uB, s.b[0], s.b[1]);
+        g.uniform1f(sim.u.uAmt, s.amt); g.uniform1f(sim.u.uWave, s.wave);
+      } else { g.uniform1f(sim.u.uAmt, 0); g.uniform1f(sim.u.uWave, 0); }
+      g.drawArrays(g.TRIANGLES, 0, 3);
+      const tmp = A; A = B; B = tmp;
+    }
   }
 
   let acc = 0, prev = performance.now(), raf = 0;
